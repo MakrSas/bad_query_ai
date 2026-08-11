@@ -148,6 +148,7 @@ Workflow: .github/workflows/build.yml
 | v27 | Siri preference key recovery | Decodes key/context objects, reads the raw value, and inventories setter exports |
 | v44 | Siri lifecycle-surface map | Read-only inventory of AssistantServices selectors potentially reached by a system Settings action; no daemon, XPC, or preference operation is invoked |
 | v45 | Siri Settings lifecycle chain | Read-only call map for exact Siri enablement/language setters and their notification handlers; no selector is invoked |
+| v46 | InstallCoordination entry probe | Creates, reads, and removes unique markers in the three daemon-state directories; never stages a graph, symlink, or target plist |
 
 ## v7 Results
 

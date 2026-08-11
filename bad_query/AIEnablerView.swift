@@ -98,6 +98,10 @@ struct AIEnablerView: View {
                         Button("Map Siri Settings Lifecycle Chain (Safe)") {
                             mapSiriSettingsLifecycleChain()
                         }
+
+                        Button("Probe InstallCoordination Entry (Bounded)") {
+                            probeInstallCoordinationEntry()
+                        }
                     }
 
                     Section("Apply") {
@@ -980,6 +984,18 @@ struct AIEnablerView: View {
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("read-only; no Siri setting was changed")
         appendLog("=== END SIRI SETTINGS LIFECYCLE CHAIN ===")
+    }
+
+    func probeInstallCoordinationEntry() {
+        appendLog("=== INSTALLCOORDINATION ENTRY PROBE ===")
+        guard let cString = installcoord_entry_probe() else {
+            appendLog("InstallCoordination probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END INSTALLCOORDINATION ENTRY PROBE ===")
     }
 
     func probeSiriGroups() {

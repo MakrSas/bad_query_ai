@@ -38,6 +38,7 @@ typedef void (*container_query_set_part_domain_fn)(void *, const char *);
 typedef void *(*container_query_get_single_result_fn)(void *);
 typedef void (*container_query_free_fn)(void *);
 typedef char *(*container_copy_sandbox_token_fn)(void *);
+typedef const char *(*container_object_get_path_fn)(void *);
 typedef int64_t (*sandbox_extension_consume_fn)(const char *);
 typedef int (*sandbox_extension_release_fn)(int64_t);
 
@@ -2183,6 +2184,101 @@ char *siri_settings_lifecycle_call_map(void) {
     len += snprintf(out + len, cap - len,
                     "read-only; Settings lifecycle methods were not invoked\n");
     dlclose(assistant);
+    return out;
+}
+
+// v46 is deliberately limited to the public PoC's reversible entry check.
+// It obtains extensions for the three InstallCoordination state directories,
+// writes one random marker in each, verifies it, deletes it, and releases the
+// extension. It never stages a promise graph or creates a symlink.
+char *installcoord_entry_probe(void) {
+    const size_t cap = 8192;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *mgr = dlopen("/usr/lib/system/libsystem_containermanager.dylib",
+                       RTLD_NOW | RTLD_LOCAL);
+    container_query_create_fn create = mgr ? (container_query_create_fn)dlsym(mgr, "container_query_create") : NULL;
+    container_query_set_class_fn set_class = mgr ? (container_query_set_class_fn)dlsym(mgr, "container_query_set_class") : NULL;
+    container_query_set_identifiers_fn set_group = mgr ? (container_query_set_identifiers_fn)dlsym(mgr, "container_query_set_group_identifiers") : NULL;
+    container_query_set_flags_fn set_flags = mgr ? (container_query_set_flags_fn)dlsym(mgr, "container_query_operation_set_flags") : NULL;
+    container_query_set_part_fn set_part = mgr ? (container_query_set_part_fn)dlsym(mgr, "container_query_operation_set_part") : NULL;
+    container_query_set_part_domain_fn set_domain = mgr ? (container_query_set_part_domain_fn)dlsym(mgr, "container_query_operation_set_part_domain") : NULL;
+    container_query_get_single_result_fn result_for_query = mgr ? (container_query_get_single_result_fn)dlsym(mgr, "container_query_get_single_result") : NULL;
+    container_query_free_fn free_query = mgr ? (container_query_free_fn)dlsym(mgr, "container_query_free") : NULL;
+    container_copy_sandbox_token_fn copy_token = mgr ? (container_copy_sandbox_token_fn)dlsym(mgr, "container_copy_sandbox_token") : NULL;
+    container_object_get_path_fn object_path = mgr ? (container_object_get_path_fn)dlsym(mgr, "container_object_get_path") : NULL;
+    sandbox_extension_consume_fn consume = (sandbox_extension_consume_fn)dlsym(RTLD_DEFAULT, "sandbox_extension_consume");
+    if (!create || !set_class || !set_group || !set_flags || !set_part || !set_domain ||
+        !result_for_query || !free_query || !copy_token || !object_path || !consume) {
+        snprintf(out, cap, "InstallCoordination=SYMBOLS_MISSING\n");
+        if (mgr) dlclose(mgr);
+        return out;
+    }
+    const char *parts[] = { "PromiseStaging", "DataPromises", "Coordinators", NULL };
+    bool all_ok = true;
+    for (int i = 0; parts[i]; i++) {
+        void *query = create();
+        if (!query) { all_ok = false; len += snprintf(out + len, cap - len, "%s query=FAILED\n", parts[i]); continue; }
+        xpc_object_t group = xpc_string_create("systemgroup.com.apple.installcoordinationd");
+        char domain[PATH_MAX] = {0};
+        snprintf(domain, sizeof(domain), "../InstallCoordination/%s", parts[i]);
+        set_class(query, 13);
+        set_group(query, group);
+        set_flags(query, UINT64_C(0x8100000000));
+        set_part(query, 3);
+        set_domain(query, domain);
+        void *object = result_for_query(query);
+        const char *raw_path = object ? object_path(object) : NULL;
+        char *path = raw_path ? strdup(raw_path) : NULL;
+        char *token = object ? copy_token(object) : NULL;
+        int64_t extension = token ? consume(token) : -1;
+        free(token);
+        xpc_release(group);
+        free_query(query);
+        if (!path || extension < 0) {
+            all_ok = false;
+            len += snprintf(out + len, cap - len,
+                            "%s token=%d path=%s\n", parts[i], extension >= 0,
+                            path ? path : "(null)");
+            free(path);
+            if (extension >= 0) bad_query_release(extension);
+            continue;
+        }
+        char marker[PATH_MAX] = {0};
+        snprintf(marker, sizeof(marker), "%s/.ai-enabler-v46-%d-%08x",
+                 path, getpid(), arc4random());
+        const char payload[] = "AI Enabler v46 reversible entry marker\n";
+        int fd = open(marker, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        bool absent_before = fd >= 0;
+        bool wrote = false;
+        bool readback = false;
+        bool removed = false;
+        if (fd >= 0) {
+            wrote = write(fd, payload, sizeof(payload) - 1) == (ssize_t)(sizeof(payload) - 1);
+            close(fd);
+            char read_buffer[sizeof(payload)] = {0};
+            int read_fd = open(marker, O_RDONLY | O_CLOEXEC);
+            readback = read_fd >= 0 && read(read_fd, read_buffer, sizeof(payload) - 1) == (ssize_t)(sizeof(payload) - 1) &&
+                memcmp(read_buffer, payload, sizeof(payload) - 1) == 0;
+            if (read_fd >= 0) close(read_fd);
+            removed = unlink(marker) == 0;
+        }
+        struct stat st = {0};
+        bool absent_after = lstat(marker, &st) != 0 && errno == ENOENT;
+        bool ok = absent_before && wrote && readback && removed && absent_after;
+        all_ok = all_ok && ok;
+        len += snprintf(out + len, cap - len,
+                        "%s root=%s created=%d readback=%d removed=%d absentAfter=%d\n",
+                        parts[i], path, absent_before && wrote, readback, removed, absent_after);
+        free(path);
+        bad_query_release(extension);
+    }
+    len += snprintf(out + len, cap - len,
+                    "success=%d\n"
+                    "bounded entry test only; no promise graph, symlink, or system plist was touched\n",
+                    all_ok);
+    dlclose(mgr);
     return out;
 }
 
