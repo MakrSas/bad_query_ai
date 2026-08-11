@@ -432,6 +432,14 @@ The client connected successfully to `com.apple.siri.orchestration.capabilities`
 
 v32 decodes the direct calls and Objective-C selector stubs in `-[AFSiriCapabilitiesServiceClient updateCapabilities:]` and `-[SOSiriCapabilitiesServiceClient requestSiriAvailabilityWithCompletion:]`. It does not invoke either method. The output identifies the remote selector and completion plumbing needed for a correctly typed service refresh/request.
 
+### v32 device result
+
+Both client methods obtain a remote proxy through `serviceWithErrorHandler:` and forward to a remote method with the same selector. Their wrapper layouts are effectively identical and include local `NSError` construction for transport failures. `updateCapabilities:` therefore takes a one-object completion/error callback rather than a capability payload.
+
+## v33 Capability Service Refresh
+
+v33 invokes the confirmed `updateCapabilities:` client method with a one-object completion block, waits at most eight seconds, reports the callback value or timeout, and then queries the three synchronous service booleans again. The intended sequence is Apply SAE Availability, Refresh SAE Cache, then this service update, without respring.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

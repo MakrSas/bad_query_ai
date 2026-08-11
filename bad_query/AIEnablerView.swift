@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v32 — map capability service calls"
+    @State private var log = "AI Enabler v33 — refresh Siri capability service"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Map Siri Capability Service Calls") {
-                            mapSiriCapabilityServiceCalls()
+                        Button("Refresh Siri Capability Service") {
+                            refreshSiriCapabilityService()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v32" }
+                            Button("Clear") { log = "AI Enabler v33" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -826,6 +826,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI CAPABILITY CLIENT CALL MAP ===")
+    }
+
+    func refreshSiriCapabilityService() {
+        appendLog("=== SIRI CAPABILITY SERVICE UPDATE ===")
+        guard let cString = siri_capabilities_service_update() else {
+            appendLog("service update returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI CAPABILITY SERVICE UPDATE ===")
     }
 
     func probeSiriGroups() {

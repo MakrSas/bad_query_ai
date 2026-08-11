@@ -16,6 +16,7 @@
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
+#include <dispatch/dispatch.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
 #if __has_include(<ptrauth.h>)
@@ -1597,6 +1598,43 @@ char *siri_capabilities_client_call_map(void) {
         }
     }
     len += snprintf(out + len, cap - len, "read-only; methods not invoked\n");
+    dlclose(assistant);
+    return out;
+}
+
+char *siri_capabilities_service_update(void) {
+    const size_t cap = 8192;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+    Class cls = objc_getClass("AFSiriCapabilitiesServiceClient");
+    SEL update_sel = sel_registerName("updateCapabilities:");
+    if (!cls || !class_getInstanceMethod(cls, update_sel)) {
+        snprintf(out, cap, "updateCapabilities=NOT_FOUND\n"); dlclose(assistant); return out;
+    }
+    id client = ((id (*)(id, SEL))objc_msgSend)((id)cls, sel_registerName("alloc"));
+    client = client ? ((id (*)(id, SEL))objc_msgSend)(client, sel_registerName("init")) : nil;
+    if (!client) { snprintf(out, cap, "client=INIT_FAILED\n"); dlclose(assistant); return out; }
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    __block bool callback_called = false;
+    __block CFTypeRef callback_value = NULL;
+    void (^completion)(id) = ^(id value) {
+        callback_called = true;
+        if (value) callback_value = CFRetain((CFTypeRef)value);
+        dispatch_semaphore_signal(sem);
+    };
+    ((void (*)(id, SEL, id))objc_msgSend)(client, update_sel, completion);
+    long wait_result = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 8LL * NSEC_PER_SEC));
+    len += snprintf(out + len, cap - len, "update.sent=1 callback=%d timeout=%d\n", callback_called, wait_result != 0);
+    append_cf_description(out, cap, &len, "callback.value", callback_value);
+    if (callback_value) CFRelease(callback_value);
+    bool sae = ((bool (*)(id, SEL))objc_msgSend)(client, sel_registerName("siriSystemAssistantExperienceEnabledSync"));
+    bool assets = ((bool (*)(id, SEL))objc_msgSend)(client, sel_registerName("shouldDownloadAssetsForSiriSystemAssistantExperienceSync"));
+    bool intents = ((bool (*)(id, SEL))objc_msgSend)(client, sel_registerName("siriWithAppIntentsEnabledSync"));
+    len += snprintf(out + len, cap - len, "service.after.SAE=%d\nservice.after.shouldDownloadAssets=%d\nservice.after.AppIntents=%d\n", sae, assets, intents);
+    ((void (*)(id, SEL))objc_msgSend)(client, sel_registerName("release"));
     dlclose(assistant);
     return out;
 }
