@@ -448,6 +448,14 @@ The callback completed immediately with Cocoa error 4099 wrapping Mach lookup er
 
 v34 checks likely system locations for the standalone capability XPC service or owning daemon. For any readable executable found, it extracts printable strings containing Siri, SAE, Linwood, Grey/Gray Matter, feature-flag, capability, orchestration, device-capable, or availability terms. This is a read-only scan intended to recover the service implementation's preference keys and upstream inputs without requiring Mach lookup access.
 
+### v34 device result
+
+None of the guessed standalone XPC, framework plug-in, or `/usr/libexec` executable paths exists. The service is therefore likely registered by launchd inside a differently named Siri daemon or framework support executable.
+
+## v35 Capability Service Registration Locator
+
+v35 scans readable system LaunchDaemon and LaunchAgent plists for the exact Mach service name, and recursively inventories Siri/Assistant/Orchestration-named entries under system frameworks and `/usr/libexec`. It is read-only and intended to recover the owning executable path before scanning that exact binary.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

@@ -49,6 +49,7 @@ char *siri_capabilities_service_sync_probe(void);
 char *siri_capabilities_client_call_map(void);
 char *siri_capabilities_service_update(void);
 char *siri_capability_service_binary_probe(void);
+char *siri_capability_service_registration_probe(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);

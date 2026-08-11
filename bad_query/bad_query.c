@@ -12,7 +12,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <limits.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
@@ -1688,6 +1690,58 @@ char *siri_capability_service_binary_probe(void) {
         fclose(f);
     }
     len += snprintf(out + len, cap - len, "read-only binary string scan\n");
+    return out;
+}
+
+static bool path_name_mentions_siri(const char *s) {
+    return strcasestr(s, "siri") || strcasestr(s, "assistant") || strcasestr(s, "orchestration");
+}
+
+static void scan_system_tree_names(const char *root, int depth, char *out, size_t cap, size_t *len) {
+    if (depth < 0 || *len + 1024 >= cap) return;
+    DIR *dir = opendir(root);
+    if (!dir) { *len += snprintf(out + *len, cap - *len, "DENIED/MISS %s errno=%d\n", root, errno); return; }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) && *len + 1024 < cap) {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/%s", root, entry->d_name);
+        if (path_name_mentions_siri(entry->d_name))
+            *len += snprintf(out + *len, cap - *len, "NAME %s\n", path);
+        if (depth > 0 && entry->d_type == DT_DIR)
+            scan_system_tree_names(path, depth - 1, out, cap, len);
+    }
+    closedir(dir);
+}
+
+static void scan_launch_plists(const char *root, char *out, size_t cap, size_t *len) {
+    DIR *dir = opendir(root);
+    if (!dir) { *len += snprintf(out + *len, cap - *len, "DENIED/MISS %s errno=%d\n", root, errno); return; }
+    struct dirent *entry;
+    const char needle[] = "com.apple.siri.orchestration.capabilities";
+    while ((entry = readdir(dir)) && *len + 1024 < cap) {
+        if (!strstr(entry->d_name, ".plist")) continue;
+        char path[PATH_MAX]; snprintf(path, sizeof(path), "%s/%s", root, entry->d_name);
+        FILE *f = fopen(path, "rb"); if (!f) continue;
+        char *data = malloc(1024 * 1024 + 1); if (!data) { fclose(f); continue; }
+        size_t n = fread(data, 1, 1024 * 1024, f); data[n] = 0; fclose(f);
+        if (memmem(data, n, needle, sizeof(needle) - 1))
+            *len += snprintf(out + *len, cap - *len, "REGISTRATION %s\n", path);
+        free(data);
+    }
+    closedir(dir);
+}
+
+char *siri_capability_service_registration_probe(void) {
+    const size_t cap = 131072;
+    char *out = calloc(1, cap); if (!out) return NULL;
+    size_t len = 0;
+    scan_launch_plists("/System/Library/LaunchDaemons", out, cap, &len);
+    scan_launch_plists("/System/Library/LaunchAgents", out, cap, &len);
+    scan_system_tree_names("/System/Library/PrivateFrameworks", 3, out, cap, &len);
+    scan_system_tree_names("/System/Library/Frameworks", 3, out, cap, &len);
+    scan_system_tree_names("/usr/libexec", 1, out, cap, &len);
+    len += snprintf(out + len, cap - len, "read-only registration/name scan\n");
     return out;
 }
 
