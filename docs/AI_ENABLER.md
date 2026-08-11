@@ -557,6 +557,14 @@ The user performed the disable/enable Siri test, not a language change. Afterwar
 
 This proves a normal Settings action reaches a system-owned capability recomputation, but that recomputation consumes a source that still evaluates this physical device as non-capable. It is therefore not a way to preserve a forged `SiriAvailability` object. v45 maps the exact setters and external-notification handlers without invoking them, to recover the daemon-side writer/notification chain before trying another lifecycle action.
 
+### v45 device result
+
+`AFPreferences -setAssistantIsEnabled:` calls a contextual preferences object (`initWithInstanceContext:` then `setAssistantEnabled:`), a barrier, and `_AFPreferencesSetValueForKeyWithContext`; its local companion does the same. The external enablement handler first performs `AFBackedUpPreferencesSynchronize`, obtains `assistantIsEnabled` and `dictationIsEnabled`, then fan-outs local observers. It does not call `AFSiriCapabilitiesServiceClient`, `updateCapabilities:`, `fetchSiriAvailability`, a MobileGestalt reload, or any launchd/process API.
+
+The language route is also not a capability refresh: `setLanguageCode:` writes contextual preferences and synchronizes; `synchronizeVoiceServicesLanguageCode` selects an output voice and conditionally queries `AFDeviceSupportsSystemAssistantExperience`. Its external handler synchronizes backed-up preferences and posts local Foundation notifications. A Siri language change is therefore not a distinct route to restart or reconfigure `assistantd` and should not be repeated as an enablement experiment.
+
+The remaining useful read-only task is to recover the static preference key/context arguments at each `_AFPreferencesSetValueForKeyWithContext` call, then establish whether the daemon's capability writer subscribes to one of those backed-up preference domains or instead uses an independent identity source.
+
 ## Reassessment of Related bad_query PoCs
 
 The four public PoCs were checked against the established iLoader boundary:
