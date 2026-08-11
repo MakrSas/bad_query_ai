@@ -110,7 +110,7 @@ The `com.apple.geod` identifier is in ContainerManagerCommon's built-in bypass l
 
 ## Build
 
-GitHub Actions with `xcode-27` runner. Produces unsigned IPA/TIPA for TrollStore sideloading.
+GitHub Actions with an `xcode-27` runner. Produces unsigned IPA/TIPA; the current device workflow installs the IPA through iLoader.
 
 ```
 Repository: MakrSas/bad_query_ai
@@ -127,8 +127,9 @@ Workflow: .github/workflows/build.yml
 | v6 | Feature flag attack + container scanner | No set API in FeatureFlags framework; Global.plist absent; container scan empty |
 | v7 | Eligibility API attack + MG key probe | CRASH: wrong API signatures; MG key hashes wrong for iOS 27 |
 | v8 | FeatureFlags ABI + process-boundary strategy | Strategy documented; daemon injection is the primary feasibility gate |
-| v9 | Full iOS 27 MobileGestalt identity spoof | Pending device test; patches newly discovered ProductType/HWModel mirrors |
-| v10 | Complete Siri gate diagnostics | Probes AssistantServices, Siri UOD MobileGestalt getter, and expanded FeatureFlags |
+| v9 | Full iOS 27 MobileGestalt identity spoof | Device-confirmed: all tested identity mirrors changed, but required Siri flags stayed disabled |
+| v10 | Complete Siri gate diagnostics | Unsafe private-function calls crashed on 24A5390f; removed in v11 |
+| v11 | Siri app-group discovery | Resolves known Siri/Assistant group containers through the class-7 primitive |
 
 ## v7 Results
 
@@ -192,9 +193,11 @@ This creates a plausible iOS 27 hard-gate path: eligibility reads the classic sp
 
 v9 adds a separate **Apply Full Identity Spoof** action. It preserves the existing backup, writes `iPhone16,1` to the confirmed ProductType mirrors and `D83AP` to the confirmed HWModel mirrors, then requires a respring. Camera/audio-specific mirrors are included, so temporary subsystem instability is possible; reboot remains the hardware-cache rollback path.
 
+Device testing confirmed `HWModelStr=D83AP`, `HWModelUniqueStr=D83AP`, and the tested ProductType mirrors as `iPhone16,1`. `GREYMATTER` and `FOUNDATION_MODELS` remained eligible, while `Siri.sae_override` and `Siri.assistant_engine_override` remained disabled. Therefore inconsistent MobileGestalt identity is no longer the leading blocker.
+
 ## v10 Gate Probe
 
-The raw FeatureFlags result does not reveal which combined Siri predicate fails. v10 adds a read-only **Probe Complete Siri Gate** action that resolves and calls exported zero-argument AssistantServices predicates:
+The raw FeatureFlags result does not reveal which combined Siri predicate fails. v10 attempted to call several exported AssistantServices predicates as `bool(void)`.
 
 - `AFDeviceSupportsSystemAssistantExperience`
 - `AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags`
@@ -203,13 +206,24 @@ The raw FeatureFlags result does not reveal which combined Siri predicate fails.
 - `AFHasGMSCapability` and `AFHasGMSCapabilityUnembargoed`
 - `AFDeviceSupportsSiriUOD` and `AFUODStatusSupportedFull`
 
-It also probes the MobileGestalt Siri-understanding getter and additional flags including `Siri.assistant_engine`, `Siri.force_uod_enabled_for_device`, `SiriUI.sae_use_container`, `SiriNL.NLRouter`, `GenerativeModels.GenerativeModelsAvailability`, and `IntelligenceFlow.IntelligenceFlow`.
+On 24A5390f, pressing **Probe Complete Siri Gate** terminated the app before producing a report. At least one assumed prototype is therefore invalid or unsafe before framework initialization. This is the same failure class as the v7 eligibility crash: export presence does not establish an ABI.
 
-This separates four possible blockers after v9: device capability, locale, FeatureFlags, or downstream assistant/UOD availability.
+v11 replaces the action with **Probe Siri Gate Symbols (Safe)**. It only loads the frameworks and reports `PRESENT_NOT_CALLED` or `NO_SYMBOL`; it does not invoke unknown-ABI AssistantServices or MobileGestalt functions. The expanded `_os_feature_enabled_impl(const char *, const char *)` checks remain because that ABI is independently confirmed and already device-tested.
+
+## v11 Siri Container Probe
+
+Build `24A5390f` entitlement diffs identify new and existing Siri application groups under `/var/mobile/Containers/Shared/AppGroup`, which remains inside the broad `/var/containers` filesystem family reachable by the current exploit primitives. v11 performs read-only class-7 lookups for:
+
+- `group.com.apple.assistant.shared` and `.backedup`
+- `group.com.apple.siri.inference`
+- `group.com.apple.siri.sirisuggestions`
+- Siri ASR, recorded-audio, reference-resolution, user-feedback, remembers, and GMS SELF groups
+
+The probe uses `container_copy_path(container, errorOut)` to report the resolved container root and does not alter files. A returned `PATH:` result would establish a new candidate surface for subsequent targeted preference/trial-state inspection; `NO_RESULT` across all groups rules out this class-7 route under the current iLoader-signed identity.
 
 ## Device
 
 - iPhone 15 (iPhone15,4)
 - A16 Bionic (t8120, D37AP)
 - iOS 27.0 beta (Build 24A5390f)
-- TrollStore + LiveContainer
+- iLoader sideloading (no TrollStore on iOS 27)

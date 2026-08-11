@@ -414,8 +414,6 @@ char *siri_gate_probe(void) {
     char *out = calloc(1, cap);
     if (!out) return NULL;
     size_t len = 0;
-    typedef bool (*bool_noargs_fn)(void);
-
     void *assistant = NULL;
     for (int i = 0; assistant_paths[i] && !assistant; i++)
         assistant = dlopen(assistant_paths[i], RTLD_NOW | RTLD_LOCAL);
@@ -423,12 +421,9 @@ char *siri_gate_probe(void) {
     len += snprintf(out + len, cap - len, "[AssistantServices] loaded=%d\n", assistant != NULL);
     if (assistant) {
         for (int i = 0; assistant_symbols[i]; i++) {
-            bool_noargs_fn fn = (bool_noargs_fn)dlsym(assistant, assistant_symbols[i]);
-            if (fn) {
-                len += snprintf(out + len, cap - len, "%s=%d\n", assistant_symbols[i], fn() ? 1 : 0);
-            } else {
-                len += snprintf(out + len, cap - len, "%s=NO_SYMBOL\n", assistant_symbols[i]);
-            }
+            void *symbol = dlsym(assistant, assistant_symbols[i]);
+            len += snprintf(out + len, cap - len, "%s=%s\n", assistant_symbols[i],
+                            symbol ? "PRESENT_NOT_CALLED" : "NO_SYMBOL");
         }
         dlclose(assistant);
     }
@@ -437,12 +432,9 @@ char *siri_gate_probe(void) {
     len += snprintf(out + len, cap - len, "[MobileGestalt Siri UOD]\n");
     if (mg) {
         for (int i = 0; mg_symbols[i]; i++) {
-            bool_noargs_fn fn = (bool_noargs_fn)dlsym(mg, mg_symbols[i]);
-            if (fn) {
-                len += snprintf(out + len, cap - len, "%s=%d\n", mg_symbols[i], fn() ? 1 : 0);
-            } else {
-                len += snprintf(out + len, cap - len, "%s=NO_SYMBOL\n", mg_symbols[i]);
-            }
+            void *symbol = dlsym(mg, mg_symbols[i]);
+            len += snprintf(out + len, cap - len, "%s=%s\n", mg_symbols[i],
+                            symbol ? "PRESENT_NOT_CALLED" : "NO_SYMBOL");
         }
         dlclose(mg);
     } else {
@@ -456,6 +448,86 @@ char *siri_gate_probe(void) {
                         ff_domains[i][0], ff_domains[i][1], value);
     }
 
+    return out;
+}
+
+char *siri_group_probe(void) {
+    const char *group_ids[] = {
+        "group.com.apple.assistant.shared",
+        "group.com.apple.assistant.shared.backedup",
+        "group.com.apple.siri.ASR.shared",
+        "group.com.apple.siri.recorded-audio",
+        "group.com.apple.siri.referenceResolution",
+        "group.com.apple.siri.inference",
+        "group.com.apple.siri.sirisuggestions",
+        "group.com.apple.siri.userfeedbacklearning",
+        "group.com.apple.siri.remembers",
+        "group.com.apple.siri.GMSSELFIngestor",
+        NULL
+    };
+
+    size_t cap = 16384;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+
+    void *mgr = dlopen("/usr/lib/system/libsystem_containermanager.dylib", RTLD_NOW | RTLD_LOCAL);
+    if (!mgr) {
+        snprintf(out, cap, "containermanager=NOT_LOADED\n");
+        return out;
+    }
+
+    container_query_create_fn query_create = (container_query_create_fn)dlsym(mgr, "container_query_create");
+    container_query_set_class_fn query_set_class = (container_query_set_class_fn)dlsym(mgr, "container_query_set_class");
+    container_query_set_identifiers_fn query_set_group_identifiers = (container_query_set_identifiers_fn)dlsym(mgr, "container_query_set_group_identifiers");
+    container_query_set_flags_fn query_set_flags = (container_query_set_flags_fn)dlsym(mgr, "container_query_operation_set_flags");
+    container_query_set_part_fn query_set_part = (container_query_set_part_fn)dlsym(mgr, "container_query_operation_set_part");
+    container_query_get_single_result_fn query_get_single_result = (container_query_get_single_result_fn)dlsym(mgr, "container_query_get_single_result");
+    container_query_free_fn query_free = (container_query_free_fn)dlsym(mgr, "container_query_free");
+    typedef char *(*container_copy_path_fn)(void *, uint64_t *);
+    container_copy_path_fn copy_path = (container_copy_path_fn)dlsym(mgr, "container_copy_path");
+
+    if (!query_create || !query_set_class || !query_set_group_identifiers ||
+        !query_set_flags || !query_set_part || !query_get_single_result ||
+        !query_free || !copy_path) {
+        snprintf(out, cap, "containermanager=SYMBOLS_MISSING\n");
+        dlclose(mgr);
+        return out;
+    }
+
+    for (int i = 0; group_ids[i]; i++) {
+        void *query = query_create();
+        if (!query) {
+            len += snprintf(out + len, cap - len, "%s=QUERY_CREATE_FAILED\n", group_ids[i]);
+            continue;
+        }
+
+        query_set_class(query, 7); // MCMSharedDataContainer / app group
+        xpc_object_t identifier = xpc_string_create(group_ids[i]);
+        query_set_group_identifiers(query, identifier);
+        query_set_part(query, 3); // known-valid Library/Caches part; copy_path still returns container root
+        query_set_flags(query, 0x0000000800000000ULL);
+
+        void *result = query_get_single_result(query);
+        if (!result) {
+            len += snprintf(out + len, cap - len, "%s=NO_RESULT\n", group_ids[i]);
+        } else {
+            uint64_t error = 0;
+            char *path = copy_path(result, &error);
+            if (path) {
+                len += snprintf(out + len, cap - len, "%s=PATH:%s\n", group_ids[i], path);
+                free(path);
+            } else {
+                len += snprintf(out + len, cap - len, "%s=PATH_ERROR:%llu\n",
+                                group_ids[i], (unsigned long long)error);
+            }
+        }
+
+        xpc_release(identifier);
+        query_free(query);
+    }
+
+    dlclose(mgr);
     return out;
 }
 

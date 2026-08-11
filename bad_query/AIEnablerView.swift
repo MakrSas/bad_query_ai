@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v10 — Siri gate diagnostics"
+    @State private var log = "AI Enabler v11 — Siri container discovery"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -74,7 +74,7 @@ struct AIEnablerView: View {
                             checkRequiredFlags()
                         }
 
-                        Button("Probe Complete Siri Gate") {
+                        Button("Probe Siri Gate Symbols (Safe)") {
                             probeSiriGate()
                         }
                     }
@@ -92,7 +92,13 @@ struct AIEnablerView: View {
                         }
                     }
 
-                    Section("Step 5: Apply") {
+                    Section("Step 5: Siri Containers") {
+                        Button("Probe Siri App Groups") {
+                            probeSiriGroups()
+                        }
+                    }
+
+                    Section("Step 6: Apply") {
                         Button("Respring") {
                             showRespring = true
                         }
@@ -122,7 +128,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v10" }
+                            Button("Clear") { log = "AI Enabler v11" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -535,7 +541,7 @@ struct AIEnablerView: View {
     }
 
     func probeSiriGate() {
-        appendLog("=== COMPLETE SIRI GATE ===")
+        appendLog("=== SIRI GATE SYMBOLS (NO PRIVATE CALLS) ===")
         guard let cString = siri_gate_probe() else {
             appendLog("probe returned nil")
             return
@@ -545,7 +551,23 @@ struct AIEnablerView: View {
         for line in result.split(separator: "\n") {
             appendLog(String(line))
         }
-        appendLog("=== END SIRI GATE ===")
+        appendLog("unknown-ABI symbols are presence-tested only")
+        appendLog("=== END SIRI GATE SYMBOLS ===")
+    }
+
+    func probeSiriGroups() {
+        appendLog("=== SIRI APP GROUPS ===")
+        guard let cString = siri_group_probe() else {
+            appendLog("probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only discovery; no files changed")
+        appendLog("=== END SIRI APP GROUPS ===")
     }
 
     func fullStatus() {
