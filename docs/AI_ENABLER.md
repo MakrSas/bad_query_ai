@@ -408,6 +408,14 @@ Applying after startup and then calling the recovered refresh method changes its
 
 v29 adds a read-only runtime inventory of loaded Siri/Assistant/Availability classes and their availability, capability, orchestration, fetch, refresh, update, and save methods. It does not invoke discovered methods. The goal is to identify the producer or XPC-facing manager that rewrites `SiriAvailability` at startup and supplies external Siri processes. Completed CacheExtra/MG and setter-verification controls are removed from the main UI.
 
+### v29 device result
+
+The inventory identified the cross-process availability path: `SOSiriCapabilitiesServiceClient` exposes `requestSiriAvailabilityWithCompletion:`, while `AFSiriCapabilitiesServiceClient` exposes `updateCapabilities:`. It also confirmed `AFSystemAssistantExperienceStatusManager` has explicit `siriAvailability`, `setSiriAvailability:`, and `fetchSiriAvailability` methods. The `SO` availability object has four capability words versus five in the local `AF` representation, indicating a service-boundary conversion rather than all consumers reading the backed-up preference directly.
+
+## v30 Capability Client Runtime
+
+v30 reports the complete instance/class method lists, properties, ivars, superclass, and instance size for the SO client, AF client, and status manager. It does not instantiate clients or call blocks. This determines their supported constructors/singletons and connection ownership before making an asynchronous XPC availability request.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

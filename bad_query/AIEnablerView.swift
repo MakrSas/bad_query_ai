@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v29 — locate Siri availability writer"
+    @State private var log = "AI Enabler v30 — inspect Siri capability clients"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Find Siri Availability Writer") {
-                            inventorySiriAvailabilityWriters()
+                        Button("Inspect Siri Capability Clients") {
+                            inspectSiriCapabilityClients()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v29" }
+                            Button("Clear") { log = "AI Enabler v30" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -789,6 +789,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI AVAILABILITY WRITER INVENTORY ===")
+    }
+
+    func inspectSiriCapabilityClients() {
+        appendLog("=== SIRI CAPABILITY CLIENT RUNTIME ===")
+        guard let cString = siri_capabilities_client_runtime() else {
+            appendLog("runtime probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI CAPABILITY CLIENT RUNTIME ===")
     }
 
     func probeSiriGroups() {
