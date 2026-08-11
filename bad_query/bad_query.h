@@ -28,4 +28,11 @@ char *probe_private_apis(void);
 int ff_try_set(const char *subsystem, const char *flag, bool value);
 int ff_check(const char *subsystem, const char *flag);
 
+// Eligibility private API
+char *elig_probe_domains(void);
+int elig_set_input_try(int p1, int p2, int p3);
+
+// MobileGestalt extra key probing
+char *mg_probe_extra_keys(void);
+
 #endif /* bad_query_h */

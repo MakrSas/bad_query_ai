@@ -375,6 +375,138 @@ int ff_check(const char *subsystem, const char *flag) {
     return result;
 }
 
+char *elig_probe_domains(void) {
+    void *el = NULL;
+    const char *paths[] = {
+        "/System/Library/PrivateFrameworks/EligibilityCore.framework/EligibilityCore",
+        "/System/Library/PrivateFrameworks/OSEligibility.framework/OSEligibility",
+        "/usr/lib/libos_eligibility.dylib",
+        NULL
+    };
+    for (int i = 0; paths[i] && !el; i++)
+        el = dlopen(paths[i], RTLD_LAZY);
+    if (!el) return strdup("no_lib");
+
+    typedef int (*get_answer_fn)(int);
+    get_answer_fn fn = (get_answer_fn)dlsym(el, "os_eligibility_get_domain_answer");
+    if (!fn) { dlclose(el); return strdup("no_fn"); }
+
+    size_t cap = 4096;
+    char *out = malloc(cap);
+    if (!out) { dlclose(el); return NULL; }
+    size_t len = 0;
+
+    for (int d = 0; d < 50; d++) {
+        int r = fn(d);
+        if (r > 0) {
+            len += snprintf(out + len, cap - len, "D%d=%d\n", d, r);
+        }
+    }
+
+    if (len == 0)
+        len += snprintf(out + len, cap - len, "no_results\n");
+
+    dlclose(el);
+    return out;
+}
+
+int elig_set_input_try(int p1, int p2, int p3) {
+    void *el = NULL;
+    const char *paths[] = {
+        "/System/Library/PrivateFrameworks/EligibilityCore.framework/EligibilityCore",
+        "/System/Library/PrivateFrameworks/OSEligibility.framework/OSEligibility",
+        "/usr/lib/libos_eligibility.dylib",
+        NULL
+    };
+    for (int i = 0; paths[i] && !el; i++)
+        el = dlopen(paths[i], RTLD_LAZY);
+    if (!el) return -100;
+
+    typedef int (*set_input_fn)(int, int, int);
+    set_input_fn fn = (set_input_fn)dlsym(el, "os_eligibility_set_input");
+    if (!fn) { dlclose(el); return -101; }
+
+    int result = fn(p1, p2, p3);
+    dlclose(el);
+    return result;
+}
+
+char *mg_probe_extra_keys(void) {
+    void *mg = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_NOW | RTLD_LOCAL);
+    if (!mg) return strdup("no_lib");
+
+    typedef void *(*MGCopyAnswerFn)(const void *);
+    MGCopyAnswerFn fn = (MGCopyAnswerFn)dlsym(mg, "MGCopyAnswer");
+    if (!fn) { dlclose(mg); return strdup("no_fn"); }
+
+    const char *keys[] = {
+        "oPeik/9e8lQWMszEjbPzng",
+        "qNNddlUK+B/YlooNoymwgA",
+        "IMLaTlEKsZ4jjGfHG/bVEg",
+        "3iiS7QzaQ7/UV9cSk2sn/A",
+        "Efj9FNfV60OLkq9HSOVY3Q",
+        "YlEtRmOVvRG0xznyT6qevQ",
+        "7MKiVMCJB3WEcOElKrGkog",
+        "ASDqJXBxJ3OpjRM9aQFLWg",
+        "zHeENZu+wbg7PUprwNwBWg",
+        "RqQ7DSxER3BAoOivu/q8Vg",
+        "+3Uf0Pm5F8Xy7Onyvko0vA",
+        "J/MYIxisnrhXiJFa3pLdyg",
+        NULL
+    };
+    const char *names[] = {
+        "AlwaysOnAssistant",
+        "DeviceClassNumber",
+        "DeviceVariant",
+        "SiriEnabled",
+        "MLCapable",
+        "ANECapable",
+        "ANENumCores",
+        "DeviceHasANE",
+        "HeySiriSupport",
+        "SiriAllowed",
+        "NeuralEngine",
+        "SiriGestaltKey",
+        NULL
+    };
+
+    size_t cap = 4096;
+    char *out = malloc(cap);
+    if (!out) { dlclose(mg); return NULL; }
+    size_t len = 0;
+
+    for (int i = 0; keys[i]; i++) {
+        CFStringRef cfKey = CFStringCreateWithCString(kCFAllocatorDefault, keys[i], kCFStringEncodingUTF8);
+        if (!cfKey) continue;
+        void *val = fn(cfKey);
+        CFRelease(cfKey);
+        if (val) {
+            CFTypeID tid = CFGetTypeID(val);
+            if (tid == CFBooleanGetTypeID()) {
+                len += snprintf(out + len, cap - len, "%s=%s\n", names[i],
+                    CFBooleanGetValue(val) ? "true" : "false");
+            } else if (tid == CFNumberGetTypeID()) {
+                int64_t n = 0;
+                CFNumberGetValue(val, kCFNumberSInt64Type, &n);
+                len += snprintf(out + len, cap - len, "%s=%lld\n", names[i], n);
+            } else if (tid == CFStringGetTypeID()) {
+                char buf[256];
+                CFStringGetCString(val, buf, sizeof(buf), kCFStringEncodingUTF8);
+                len += snprintf(out + len, cap - len, "%s=%s\n", names[i], buf);
+            } else {
+                len += snprintf(out + len, cap - len, "%s=<type%lu>\n", names[i], tid);
+            }
+            CFRelease(val);
+        }
+    }
+
+    if (len == 0)
+        len += snprintf(out + len, cap - len, "no_results\n");
+
+    dlclose(mg);
+    return out;
+}
+
 char *bad_query_list(char *path, int64_t max_inode) {
     struct statfs sfs;
     if (statfs(path, &sfs) != 0) return NULL;
