@@ -130,6 +130,7 @@ Workflow: .github/workflows/build.yml
 | v9 | Full iOS 27 MobileGestalt identity spoof | Device-confirmed: all tested identity mirrors changed, but required Siri flags stayed disabled |
 | v10 | Complete Siri gate diagnostics | Unsafe private-function calls crashed on 24A5390f; removed in v11 |
 | v11 | Siri app-group discovery | Resolves known Siri/Assistant group containers through the class-7 primitive |
+| v12 | Siri asset diagnostics | Read-only MobileAsset inventory after partial Apple Intelligence activation |
 
 ## v7 Results
 
@@ -224,6 +225,21 @@ The probe uses `container_copy_path(container, errorOut)` to report the resolved
 - Commit: `8c53da0` (`v11: make Siri gate probe safe and discover app groups`)
 - GitHub Actions run: [31523101781](https://github.com/MakrSas/bad_query_ai/actions/runs/31523101781)
 - Result: successful unsigned iPhoneOS build and IPA/TIPA artifact upload.
+
+### v11 device result
+
+All ten Siri/Assistant class-7 app-group queries returned `NO_RESULT`, including `group.com.apple.siri.inference` and `group.com.apple.siri.sirisuggestions`. The iLoader-signed app therefore cannot resolve those foreign app groups through the tested primitive.
+
+The safe symbol inventory completed without a crash. All eight tested AssistantServices gates were exported. The public MobileGestalt Siri-UOD export was present, while its underscore-prefixed form was absent. Expanded FeatureFlags results were:
+
+- disabled: `Siri.sae_override`, `Siri.assistant_engine_override`, `Siri.force_uod_enabled_for_device`, `SiriUI.sae_use_container`
+- enabled: `Siri.assistant_engine`, `SiriUI.sae`, `SiriNL.NLRouter`, `GenerativeModels.GenerativeModelsAvailability`, `IntelligenceFlow.IntelligenceFlow`
+
+Device screenshots materially change the diagnosis: the system Writing Tools UI appears, Image Playground reaches its generation UI, the ChatGPT extension is exposed, and Settings describes Siri as powered by Apple Intelligence. However, a long English Writing Tools request returns “Certain capabilities are unavailable at this time,” Image Playground generation fails, and Siri remains on the old experience. Only the UI and routing surfaces are partially enabled; no tested generative operation is confirmed functional. This points to shared model assets/runtime readiness or another downstream policy gate in addition to the narrower SAE/Siri-UOD flags.
+
+## v12 Asset Diagnostics
+
+v12 adds **Probe AI/Siri Assets (Safe)**. It performs no downloads or writes. It checks canonical system and mobile `AssetsV2` roots, distinguishes an absent/invisible path from a readable path and an existing-but-denied directory, and inventories visible Siri, Intelligence, Eligibility, Speech, and Generative asset types. Known Siri/AI asset directories are also queried individually with errors reported by domain and code.
 
 ## Device
 

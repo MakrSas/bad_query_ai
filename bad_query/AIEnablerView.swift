@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v11 — Siri container discovery"
+    @State private var log = "AI Enabler v12 — Siri asset diagnostics"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -96,6 +96,10 @@ struct AIEnablerView: View {
                         Button("Probe Siri App Groups") {
                             probeSiriGroups()
                         }
+
+                        Button("Probe AI/Siri Assets (Safe)") {
+                            probeAIAssets()
+                        }
                     }
 
                     Section("Step 6: Apply") {
@@ -128,7 +132,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v11" }
+                            Button("Clear") { log = "AI Enabler v12" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -568,6 +572,75 @@ struct AIEnablerView: View {
         }
         appendLog("read-only discovery; no files changed")
         appendLog("=== END SIRI APP GROUPS ===")
+    }
+
+    func probeAIAssets() {
+        appendLog("=== AI/SIRI ASSET INVENTORY ===")
+        let roots = [
+            "/var/MobileAsset/AssetsV2",
+            "/private/var/MobileAsset/AssetsV2",
+            "/var/mobile/Library/AssetsV2",
+            "/private/var/mobile/Library/AssetsV2",
+        ]
+        let assetTypes = [
+            "com_apple_MobileAsset_OSEligibility",
+            "com_apple_MobileAsset_Trial_Siri",
+            "com_apple_MobileAsset_UAF_Siri",
+            "com_apple_MobileAsset_Trial_IntelligencePlatform",
+            "com_apple_MobileAsset_EmbeddedSpeech",
+            "com_apple_MobileAsset_VoiceServicesVocalizerVoice",
+        ]
+        let fm = FileManager.default
+
+        for root in roots {
+            var isDirectory: ObjCBool = false
+            let exists = fm.fileExists(atPath: root, isDirectory: &isDirectory)
+            guard exists else {
+                appendLog("[ROOT] \(root)=NOT_VISIBLE")
+                continue
+            }
+            do {
+                let children = try fm.contentsOfDirectory(atPath: root).sorted()
+                appendLog("[ROOT] \(root)=READABLE count=\(children.count)")
+                let relevant = children.filter {
+                    let s = $0.lowercased()
+                    return s.contains("siri") || s.contains("intelligence") ||
+                           s.contains("eligibility") || s.contains("speech") ||
+                           s.contains("generative")
+                }
+                for child in relevant.prefix(80) {
+                    appendLog("  type:\(child)")
+                }
+                if relevant.count > 80 {
+                    appendLog("  ... \(relevant.count - 80) more relevant types")
+                }
+            } catch {
+                let e = error as NSError
+                appendLog("[ROOT] \(root)=EXISTS_DENIED domain=\(e.domain) code=\(e.code)")
+            }
+        }
+
+        appendLog("[KNOWN TYPES]")
+        for type in assetTypes {
+            let path = "/var/MobileAsset/AssetsV2/\(type)"
+            var isDirectory: ObjCBool = false
+            if !fm.fileExists(atPath: path, isDirectory: &isDirectory) {
+                appendLog("\(type)=NOT_VISIBLE")
+                continue
+            }
+            do {
+                let children = try fm.contentsOfDirectory(atPath: path).sorted()
+                appendLog("\(type)=READABLE entries=\(children.count)")
+                for child in children.prefix(20) {
+                    appendLog("  \(child)")
+                }
+            } catch {
+                let e = error as NSError
+                appendLog("\(type)=EXISTS_DENIED domain=\(e.domain) code=\(e.code)")
+            }
+        }
+        appendLog("read-only; no assets requested or changed")
+        appendLog("=== END AI/SIRI ASSET INVENTORY ===")
     }
 
     func fullStatus() {
