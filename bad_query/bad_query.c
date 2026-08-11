@@ -17,6 +17,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
 #include <objc/runtime.h>
+#include <objc/message.h>
 #if __has_include(<ptrauth.h>)
 #include <ptrauth.h>
 #endif
@@ -802,6 +803,59 @@ char *siri_deprecated_dependency_probe(void) {
     len += snprintf(out + len, 16384 - len, "dependency3.argument=%s\n",
                     argument ? argument : "?");
 
+    dlclose(assistant);
+    return out;
+}
+
+char *siri_refresh_sae_cache(void) {
+    char *out = calloc(1, 4096);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, 4096, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    typedef bool (*bool_noargs_fn)(void);
+    bool_noargs_fn device_gate = (bool_noargs_fn)dlsym(assistant, "AFDeviceSupportsSAE");
+    bool_noargs_fn system_gate =
+        (bool_noargs_fn)dlsym(assistant, "AFDeviceSupportsSystemAssistantExperience");
+    len += snprintf(out + len, 4096 - len, "before DeviceSupportsSAE=%d SystemExperience=%d\n",
+                    device_gate ? device_gate() : -1,
+                    system_gate ? system_gate() : -1);
+
+    Class manager_class = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    SEL shared_selector = sel_registerName("sharedManager");
+    SEL refresh_selector = sel_registerName("fetchGenerativeModelsAvailability");
+    if (!manager_class || !class_respondsToSelector(object_getClass(manager_class), shared_selector)) {
+        len += snprintf(out + len, 4096 - len, "manager=NOT_AVAILABLE\n");
+    } else {
+        id manager = ((id (*)(id, SEL))objc_msgSend)((id)manager_class, shared_selector);
+        if (manager && class_respondsToSelector(object_getClass(manager), refresh_selector)) {
+            ((void (*)(id, SEL))objc_msgSend)(manager, refresh_selector);
+            len += snprintf(out + len, 4096 - len, "fetchGenerativeModelsAvailability=CALLED\n");
+        } else {
+            len += snprintf(out + len, 4096 - len, "refreshSelector=NOT_AVAILABLE\n");
+        }
+    }
+
+    const char *notifications[] = {
+        "com.apple.siri.orchestration.capabilities.didChange",
+        "com.apple.gms.availability.notification",
+        "com.apple.os-eligibility-domain.change.greymatter",
+        NULL
+    };
+    for (int i = 0; notifications[i]; i++) {
+        int status = notify_post(notifications[i]);
+        len += snprintf(out + len, 4096 - len, "notify %s=%d\n", notifications[i], status);
+    }
+
+    len += snprintf(out + len, 4096 - len, "after DeviceSupportsSAE=%d SystemExperience=%d\n",
+                    device_gate ? device_gate() : -1,
+                    system_gate ? system_gate() : -1);
     dlclose(assistant);
     return out;
 }

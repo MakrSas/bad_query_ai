@@ -138,6 +138,7 @@ Workflow: .github/workflows/build.yml
 | v17 | Follow SAE branch targets | Decodes export-stub tail branches and dumps their actual destination code |
 | v18 | Hidden SAE selector recovery | Resolves Objective-C receiver and selector names behind the iOS 27 export stubs |
 | v19 | Deprecated SAE dependency recovery | Decomposes the cached device-support source into its three internal predicates |
+| v20 | Refresh stale SAE cache | Calls the known cache refresh method and posts its three observed Darwin notifications |
 
 ## v7 Results
 
@@ -303,6 +304,14 @@ v18 decodes the active export stubs directly: the receiver GOT entry from `ADRP/
 ## v19 Deprecated Gate Dependencies
 
 Exact-build v17 bytes show `AFDeviceSupportsSAEDeprecated()` computes the AND of three internal calls before logging. v19 reports the three direct branch targets, their nearest exported symbols, and the static string passed to the third dependency. It also adds the deprecated gate itself to the consolidated Boolean report. No dependency is invoked by the identification action.
+
+### v19 device result
+
+`AFDeviceSupportsSAEDeprecated()` returned `true`. Its first two dependencies resolve exactly to the already-true `AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags` and `AFLocaleSupportsSAE`; the third stripped function also returned true as part of the final AND. Despite this, cached `AFDeviceSupportsSAE` and System Assistant Experience remained false. The blocker is therefore stale manager state, not a failed capability predicate.
+
+## v20 SAE Cache Refresh
+
+v20 calls the recovered instance method `-[AFSystemAssistantExperienceStatusManager fetchGenerativeModelsAvailability]` in the app process, records `AFDeviceSupportsSAE` and System Assistant Experience before and after, and posts the three Darwin notifications observed in the manager implementation: Siri orchestration capabilities, GMS availability, and GreyMatter eligibility change. This tests whether the now-true deprecated gate can update the cache and asks listening Siri processes to perform the same refresh. The completed selector/dependency research buttons are removed from the UI.
 
 ## Device
 

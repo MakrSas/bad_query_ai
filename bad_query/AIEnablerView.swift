@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v19 — deprecated SAE dependencies"
+    @State private var log = "AI Enabler v20 — refresh stale SAE cache"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -63,12 +63,8 @@ struct AIEnablerView: View {
                             probeCurrentSiriGates()
                         }
 
-                        Button("Identify Hidden SAE Selectors") {
-                            identifySiriGateSelectors()
-                        }
-
-                        Button("Identify Deprecated SAE Dependencies") {
-                            identifyDeprecatedSiriDependencies()
+                        Button("Refresh SAE Cache") {
+                            refreshSiriCache()
                         }
                     }
 
@@ -121,7 +117,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v19" }
+                            Button("Clear") { log = "AI Enabler v20" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -645,6 +641,21 @@ struct AIEnablerView: View {
         }
         appendLog("read-only; dependencies not invoked")
         appendLog("=== END DEPRECATED SAE DEPENDENCIES ===")
+    }
+
+    func refreshSiriCache() {
+        appendLog("=== REFRESH SAE CACHE ===")
+        guard let cString = siri_refresh_sae_cache() else {
+            appendLog("refresh returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("if after values are TRUE, respring next")
+        appendLog("=== END REFRESH SAE CACHE ===")
     }
 
     func probeSiriGroups() {
