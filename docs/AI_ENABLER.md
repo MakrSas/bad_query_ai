@@ -144,6 +144,7 @@ Workflow: .github/workflows/build.yml
 | v23 | Siri availability inspection | Reads the live capability structure and names its missing SAE bits |
 | v24 | Siri availability runtime map | Enumerates the new availability object's methods, properties, and ivars |
 | v25 | Availability source details | Compares live and preference-backed objects, reasons, modes, and missing capabilities |
+| v26 | Siri preference source map | Recovers the preference API and storage-facing selectors behind `fromPreferences` |
 
 ## v7 Results
 
@@ -357,6 +358,14 @@ v24 enumerates all methods, class methods, properties, and ivars of the exact-bu
 ## v25 Live vs Preferences
 
 v25 compares the manager's live `fetchSiriAvailability` object with `+[AFSiriAvailability fromPreferences]`. It reports status, restriction and unavailability masks, all orchestration modes, boot freshness, Linwood predicates, all five capability words, serialized dictionaries, dump descriptions, and missing-capability objects for modes 2 through 5. This is read-only and determines whether a persistent preference representation can carry the required `0x3` bits.
+
+### v25 device result
+
+Live and preference-backed objects are byte-for-field equivalent and from the current boot. Status is Enabled with no restriction or unavailability reason, but desired/current mode is FullUOD (`2`), not SAE (`4`). Mode 2 has no missing capabilities; mode 4 is missing only `DeviceCapable` and `GrayMatterFeatureFlagEnabled`. The system is therefore persistently selecting the old orchestration mode rather than failing global availability.
+
+## v26 Preference Source Recovery
+
+v26 maps the exact `+[AFSiriAvailability fromPreferences]` implementation, resolves Objective-C selectors and direct symbols, and enumerates availability/orchestration/capability-related methods on `AFPreferences`-family classes. It is read-only. The goal is to identify the actual persisted key/domain and whether a supported setter exists before attempting any mutation.
 
 ## Device
 

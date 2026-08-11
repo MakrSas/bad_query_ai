@@ -1225,6 +1225,84 @@ char *siri_availability_detail_probe(void) {
     return out;
 }
 
+char *siri_preferences_source_map(void) {
+    const size_t cap = 32768;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    Class availability_class = objc_getClass("AFSiriAvailability");
+    Method method = availability_class ? class_getClassMethod(
+        availability_class, sel_registerName("fromPreferences")) : NULL;
+    if (!method) {
+        snprintf(out, cap, "fromPreferences=NOT_FOUND\n");
+        dlclose(assistant);
+        return out;
+    }
+    void *code = (void *)method_getImplementation(method);
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+    code = ptrauth_strip(code, ptrauth_key_function_pointer);
+#endif
+    uintptr_t start = (uintptr_t)code;
+    const uint32_t *ins = (const uint32_t *)code;
+    len += snprintf(out + len, cap - len, "fromPreferences.IMP=0x%llx types=%s\n",
+                    (unsigned long long)start, method_getTypeEncoding(method));
+    for (size_t n = 0; n < 192 && len + 256 < cap; n++) {
+        uint32_t instruction = ins[n];
+        if ((instruction & 0xFC000000U) != 0x94000000U) continue;
+        int64_t immediate = (int64_t)(instruction & 0x03FFFFFFU);
+        if (immediate & 0x02000000LL) immediate |= ~0x03FFFFFFLL;
+        uintptr_t source = start + n * 4;
+        uintptr_t target = (uintptr_t)((int64_t)source + (immediate << 2));
+        Dl_info info = {0};
+        dladdr((void *)target, &info);
+        const char *selector_name = NULL;
+        const uint32_t *stub = (const uint32_t *)target;
+        if ((stub[0] & 0x9F00001FU) == 0x90000001U &&
+            (stub[1] & 0xFFC003FFU) == 0x91000021U) {
+            uintptr_t selector_page = decode_adrp_target(target, stub[0]);
+            uint64_t add_imm = (stub[1] >> 10) & 0xFFF;
+            if ((stub[1] >> 22) & 1) add_imm <<= 12;
+            selector_name = (const char *)(selector_page + add_imm);
+        }
+        len += snprintf(out + len, cap - len,
+                        "+0x%04llx selector=%s nearest=%s\n",
+                        (unsigned long long)(n * 4),
+                        selector_name ? selector_name : "-",
+                        info.dli_sname ? info.dli_sname : "-");
+        // Most class factories are short; stop after the first return window.
+        if (n > 96) break;
+    }
+
+    const char *class_names[] = { "AFPreferences", "AFSiriPreferences", NULL };
+    for (int c = 0; class_names[c]; c++) {
+        Class cls = objc_getClass(class_names[c]);
+        if (!cls) continue;
+        len += snprintf(out + len, cap - len, "[%s relevant methods]\n", class_names[c]);
+        unsigned int count = 0;
+        Method *methods = class_copyMethodList(cls, &count);
+        for (unsigned int i = 0; i < count && len + 256 < cap; i++) {
+            const char *name = sel_getName(method_getName(methods[i]));
+            if (strstr(name, "Avail") || strstr(name, "avail") ||
+                strstr(name, "Orches") || strstr(name, "orches") ||
+                strstr(name, "Capab") || strstr(name, "capab") ||
+                strstr(name, "Siri") || strstr(name, "siri")) {
+                len += snprintf(out + len, cap - len, "%s types=%s\n",
+                                name, method_getTypeEncoding(methods[i]));
+            }
+        }
+        free(methods);
+    }
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

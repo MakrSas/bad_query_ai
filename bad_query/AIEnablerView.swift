@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v25 — availability source details"
+    @State private var log = "AI Enabler v26 — map Siri preference source"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -71,8 +71,8 @@ struct AIEnablerView: View {
                             inspectSiriAvailability()
                         }
 
-                        Button("Inspect Availability Sources") {
-                            inspectSiriAvailabilitySources()
+                        Button("Map Siri Preference Source (Safe)") {
+                            mapSiriPreferenceSource()
                         }
                     }
 
@@ -125,7 +125,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v25" }
+                            Button("Clear") { log = "AI Enabler v26" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -738,6 +738,21 @@ struct AIEnablerView: View {
         }
         appendLog("read-only; live and preference objects unchanged")
         appendLog("=== END AVAILABILITY SOURCES ===")
+    }
+
+    func mapSiriPreferenceSource() {
+        appendLog("=== SIRI PREFERENCE SOURCE ===")
+        guard let cString = siri_preferences_source_map() else {
+            appendLog("map returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only; preferences unchanged")
+        appendLog("=== END SIRI PREFERENCE SOURCE ===")
     }
 
     func probeSiriGroups() {
