@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v28 — controlled Siri preference write"
+    @State private var log = "AI Enabler v29 — locate Siri availability writer"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -71,10 +71,6 @@ struct AIEnablerView: View {
                             inspectSiriAvailability()
                         }
 
-                        Button("Verify Siri Preference Setter") {
-                            writeSiriPreference(operation: 0)
-                        }
-
                         Button("Apply SAE Availability") {
                             writeSiriPreference(operation: 1)
                         }
@@ -85,15 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Dump All CacheExtra Keys") {
-                            isWorking = true
-                            dumpCacheExtra()
-                            isWorking = false
-                        }
-                        .disabled(isWorking)
-
-                        Button("Probe Siri/AI MG Keys") {
-                            probeMGKeys()
+                        Button("Find Siri Availability Writer") {
+                            inventorySiriAvailabilityWriters()
                         }
                     }
 
@@ -133,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v28" }
+                            Button("Clear") { log = "AI Enabler v29" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -788,6 +777,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI PREFERENCE WRITE ===")
+    }
+
+    func inventorySiriAvailabilityWriters() {
+        appendLog("=== SIRI AVAILABILITY WRITER INVENTORY ===")
+        guard let cString = siri_availability_writer_inventory() else {
+            appendLog("inventory returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI AVAILABILITY WRITER INVENTORY ===")
     }
 
     func probeSiriGroups() {

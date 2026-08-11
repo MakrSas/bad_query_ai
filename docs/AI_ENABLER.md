@@ -400,6 +400,14 @@ Without a refresh or respring, all isolated Siri gates changed to true, includin
 
 After respring, `AFDeviceSupportsSAE` and `AFDeviceSupportsSystemAssistantExperience` returned false again while the lower-level device, locale, GMS, and deprecated gates remained true. Siri retained the classic orb UI and Writing Tools still reported unavailable capabilities. The Siri startup path therefore recomputes and replaces the patched `SiriAvailability`; a preference write before respring is not persistent across the daemon startup refresh. The next test must apply the known-good dictionary after startup and notify already-running consumers, without another respring.
 
+### v28 post-startup apply and refresh result
+
+Applying after startup and then calling the recovered refresh method changes its cached gates from false to true. The patched `0x37`/`0x1f` capability words and mode `4` survive that refresh, and all three Darwin notifications are posted successfully. SpringBoard nevertheless continues to present the classic Siri orb, showing that the app-process manager is correct while an external Siri consumer retains or independently computes old availability.
+
+## v29 Availability Writer Discovery
+
+v29 adds a read-only runtime inventory of loaded Siri/Assistant/Availability classes and their availability, capability, orchestration, fetch, refresh, update, and save methods. It does not invoke discovered methods. The goal is to identify the producer or XPC-facing manager that rewrites `SiriAvailability` at startup and supplies external Siri processes. Completed CacheExtra/MG and setter-verification controls are removed from the main UI.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

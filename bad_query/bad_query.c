@@ -1438,6 +1438,56 @@ char *siri_preferences_write(int operation) {
     return out;
 }
 
+static bool availability_related_name(const char *name) {
+    return name && (strstr(name, "Avail") || strstr(name, "avail") ||
+                    strstr(name, "Capab") || strstr(name, "capab") ||
+                    strstr(name, "Orches") || strstr(name, "orches") ||
+                    strstr(name, "Refresh") || strstr(name, "refresh") ||
+                    strstr(name, "Update") || strstr(name, "update") ||
+                    strstr(name, "Fetch") || strstr(name, "fetch") ||
+                    strstr(name, "Save") || strstr(name, "save"));
+}
+
+char *siri_availability_writer_inventory(void) {
+    const size_t cap = 65536;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+    int count = objc_getClassList(NULL, 0);
+    Class *classes = count > 0 ? calloc((size_t)count, sizeof(Class)) : NULL;
+    if (!classes) { snprintf(out, cap, "classList=FAILED\n"); dlclose(assistant); return out; }
+    count = objc_getClassList(classes, count);
+    for (int i = 0; i < count && len + 1024 < cap; i++) {
+        const char *cn = class_getName(classes[i]);
+        if (!cn || (!strstr(cn, "Siri") && !strstr(cn, "Assistant") && !strstr(cn, "Availability"))) continue;
+        bool wrote_header = false;
+        unsigned int mc = 0;
+        Method *methods = class_copyMethodList(classes[i], &mc);
+        for (unsigned int j = 0; j < mc && len + 512 < cap; j++) {
+            const char *mn = sel_getName(method_getName(methods[j]));
+            if (!availability_related_name(mn)) continue;
+            if (!wrote_header) { len += snprintf(out + len, cap - len, "[%s]\n", cn); wrote_header = true; }
+            len += snprintf(out + len, cap - len, "- %s types=%s\n", mn, method_getTypeEncoding(methods[j]));
+        }
+        free(methods);
+        Class meta = object_getClass(classes[i]);
+        mc = 0; methods = class_copyMethodList(meta, &mc);
+        for (unsigned int j = 0; j < mc && len + 512 < cap; j++) {
+            const char *mn = sel_getName(method_getName(methods[j]));
+            if (!availability_related_name(mn)) continue;
+            if (!wrote_header) { len += snprintf(out + len, cap - len, "[%s]\n", cn); wrote_header = true; }
+            len += snprintf(out + len, cap - len, "+ %s types=%s\n", mn, method_getTypeEncoding(methods[j]));
+        }
+        free(methods);
+    }
+    free(classes);
+    len += snprintf(out + len, cap - len, "read-only; no methods invoked\n");
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.
