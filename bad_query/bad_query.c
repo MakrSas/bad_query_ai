@@ -532,14 +532,18 @@ char *siri_group_probe(void) {
 }
 
 int siri_gate_call_confirmed(int gate_index) {
-    // Callsites recovered from iOS 26.1 invoke both exports with no arguments.
+    // Callsites recovered from iOS 26.1 invoke these exports with no arguments.
     // Keep each invocation isolated so an exact-build behavioral failure cannot
     // hide the result of another gate, as happened in v10's batch probe.
     const char *symbols[] = {
         "AFDeviceSupportsSystemAssistantExperience",
         "AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags",
+        "AFDeviceSupportsSAE",
+        "AFDeviceSupportsSiriUOD",
+        "AFHasGMSCapabilityUnembargoed",
+        "AFUODStatusSupportedFull",
     };
-    if (gate_index < 0 || gate_index >= 2) return -1;
+    if (gate_index < 0 || gate_index >= 6) return -1;
 
     void *assistant = dlopen(
         "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",

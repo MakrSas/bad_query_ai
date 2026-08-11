@@ -132,6 +132,7 @@ Workflow: .github/workflows/build.yml
 | v11 | Siri app-group discovery | Resolves known Siri/Assistant group containers through the class-7 primitive |
 | v12 | Siri asset diagnostics | Read-only MobileAsset inventory after partial Apple Intelligence activation |
 | v13 | Isolated Siri predicates | Separately invokes two no-argument gates whose calling convention is supported by recovered callsites |
+| v14 | Composite Siri gate split | Isolates combined SAE, Siri-UOD, GMS hardware, and full UOD asset status predicates |
 
 ## v7 Results
 
@@ -249,6 +250,14 @@ Both `/var/MobileAsset/AssetsV2` spellings exist but directory enumeration fails
 ## v13 Isolated Siri Gates
 
 Recovered iOS 26.1 callsites invoke `AFDeviceSupportsSystemAssistantExperience()` and `AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags()` with no arguments. v13 exposes one button per function and never batches them with the six unverified v10 predicates. Each attempt is persisted before invocation so a crash can be attributed to one exact export. Return value `0` or `1` distinguishes the broad System Assistant Experience decision from its device-capability-plus-FeatureFlags sub-gate.
+
+### v13 device result
+
+`AFDeviceSupportsSystemAssistantExperience()` returned `false`, while `AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags()` returned `true`. The spoofed device identity and effective FeatureFlags therefore pass the dedicated SAE capability-plus-flags sub-gate. The two disabled override flags are not required when the normal capability path succeeds. The remaining blocker is a higher-level condition inside the composite System Assistant Experience decision.
+
+## v14 Composite Gate Split
+
+v14 adds isolated calls for four more exports with recovered no-argument callsites: `AFDeviceSupportsSAE`, `AFDeviceSupportsSiriUOD`, `AFHasGMSCapabilityUnembargoed`, and `AFUODStatusSupportedFull`. This separates the combined SAE decision, Siri understanding-on-device support, unembargoed GMS hardware capability, and fully prepared UOD assets. `AFLocaleSupportsSAE` remains presence-only because its exact parameter contract has not been recovered; it is a likely source of the old v10 batch crash.
 
 ## Device
 

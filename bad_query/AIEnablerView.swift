@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v13 — isolated Siri gates"
+    @State private var log = "AI Enabler v14 — composite Siri gate split"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -84,6 +84,22 @@ struct AIEnablerView: View {
 
                         Button("Call SAE Capability+Flags Gate") {
                             callConfirmedSiriGate(1, name: "SAEByDeviceCapabilityAndFeatureFlags")
+                        }
+
+                        Button("Call Combined SAE Gate") {
+                            callConfirmedSiriGate(2, name: "DeviceSupportsSAE")
+                        }
+
+                        Button("Call Siri UOD Gate") {
+                            callConfirmedSiriGate(3, name: "DeviceSupportsSiriUOD")
+                        }
+
+                        Button("Call GMS Hardware Gate") {
+                            callConfirmedSiriGate(4, name: "HasGMSCapabilityUnembargoed")
+                        }
+
+                        Button("Call UOD Assets Full Gate") {
+                            callConfirmedSiriGate(5, name: "UODStatusSupportedFull")
                         }
                     }
 
@@ -140,7 +156,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v13" }
+                            Button("Clear") { log = "AI Enabler v14" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
