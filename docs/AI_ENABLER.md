@@ -522,6 +522,14 @@ v42 lists only the PIDs visible to the app for `assistantd`, `siriknowledged`, `
 
 v43 checks only whether standard `killall`/`launchctl` paths exist and whether the current sandbox reports `process-exec` or generic signal operations as allowed. It does not launch a command or send a signal. This completes the process-control feasibility check before any user-mediated daemon restart attempt is considered.
 
+### v43 device result
+
+Neither `/usr/bin/killall` nor either checked `launchctl` path exists. The sandbox denies both `process-exec` and generic signal operations. Together with v42's `proc_listpids` `EPERM`, this proves that the iLoader-sideloaded process cannot restart, signal, or enumerate Siri daemons. The session MobileGestalt spoof / stale-daemon cycle cannot be broken with process control from this app.
+
+## Current Boundary
+
+The remaining blocked boundary is no longer a discovered flag or preference. Achieving a persistent system-wide Siri state needs one of: (1) a write primitive for MobileGestalt's real hardware source rather than its boot-regenerated CacheExtra; (2) a jailbreak/root/launchd capability to restart `assistantd` after the session spoof; or (3) an Apple/private entitlement granting Mach lookup to `com.apple.siri.orchestration.capabilities`. Standard iLoader signing provides none of these; its sandbox explicitly rejects the XPC and process-control options.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
