@@ -135,6 +135,7 @@ Workflow: .github/workflows/build.yml
 | v14 | Composite Siri gate split | Isolates combined SAE, Siri-UOD, GMS hardware, and full UOD asset status predicates |
 | v15 | SAE locale diagnosis + UI cleanup | Removes obsolete/unsafe buttons and adds one consolidated current-gate report |
 | v16 | Exact-build SAE code dump | Reads the first 256 bytes of two exported gates for 24A5390f call-graph recovery |
+| v17 | Follow SAE branch targets | Decodes export-stub tail branches and dumps their actual destination code |
 
 ## v7 Results
 
@@ -276,6 +277,14 @@ The device reports `en_US`, preferred language `en-US`, region `US`, and `AFLoca
 ## v16 Exact-Build Code Recovery
 
 v16 adds **Dump SAE Gate Code (Safe)**. It resolves but does not invoke `AFDeviceSupportsSAE` and `AFDeviceSupportsSystemAssistantExperience`, strips arm64e function-pointer authentication when required, reports image-relative addresses, and copies the first 256 executable bytes as hex. The dump is intended for offline ARM64 disassembly to identify exact 24A5390f branch targets and the unknown additional predicate without another guessed private call.
+
+### v16 device result
+
+ARM64 disassembly proved both exports begin with resolver/dispatch stubs rather than their Boolean implementation. Their non-local tail branches target `0x1a8fc88d0` and `0x1a8fcd3e0` in that launch. Bytes after the short stubs belong to unrelated adjacent functions, so the initial 256-byte snapshots cannot reveal the composite gate.
+
+## v17 Branch-Target Recovery
+
+v17 adds **Dump SAE Branch Targets (Safe)**. It decodes direct ARM64 unconditional branch instructions in each stub, skips local control-flow edges, uses `dladdr` to identify every non-local destination, and copies 512 bytes from each destination for offline disassembly. No destination is invoked.
 
 ## Device
 

@@ -622,6 +622,70 @@ char *siri_gate_code_dump(void) {
     return out;
 }
 
+char *siri_gate_target_dump(void) {
+    const char *symbols[] = {
+        "AFDeviceSupportsSAE",
+        "AFDeviceSupportsSystemAssistantExperience",
+        NULL
+    };
+    const size_t cap = 65536;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    for (int i = 0; symbols[i]; i++) {
+        void *symbol = dlsym(assistant, symbols[i]);
+        if (!symbol) continue;
+        void *code = symbol;
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+        code = ptrauth_strip(symbol, ptrauth_key_function_pointer);
+#endif
+        uintptr_t start = (uintptr_t)code;
+        const uint32_t *instructions = (const uint32_t *)code;
+        len += snprintf(out + len, cap - len, "[%s] stub=0x%llx\n",
+                        symbols[i], (unsigned long long)start);
+
+        for (size_t n = 0; n < 28; n++) {
+            uint32_t instruction = instructions[n];
+            if ((instruction & 0xFC000000U) != 0x14000000U) continue; // B imm26 only
+            int64_t immediate = (int64_t)(instruction & 0x03FFFFFFU);
+            if (immediate & 0x02000000LL) immediate |= ~0x03FFFFFFLL;
+            uintptr_t source = start + n * 4;
+            uintptr_t target = (uintptr_t)((int64_t)source + (immediate << 2));
+            if (target >= start && target < start + 0x100) continue;
+
+            Dl_info info = {0};
+            dladdr((void *)target, &info);
+            len += snprintf(out + len, cap - len,
+                            "branch@+0x%llx target=0x%llx image=%s nearest=%s symbolOffset=0x%llx\n",
+                            (unsigned long long)(n * 4),
+                            (unsigned long long)target,
+                            info.dli_fname ? info.dli_fname : "?",
+                            info.dli_sname ? info.dli_sname : "?",
+                            (unsigned long long)(info.dli_saddr ? target - (uintptr_t)info.dli_saddr : 0));
+            const unsigned char *p = (const unsigned char *)target;
+            for (size_t offset = 0; offset < 512 && len + 80 < cap; offset += 16) {
+                len += snprintf(out + len, cap - len, "%04llx:",
+                                (unsigned long long)offset);
+                for (size_t j = 0; j < 16; j++)
+                    len += snprintf(out + len, cap - len, "%02x", p[offset + j]);
+                len += snprintf(out + len, cap - len, "\n");
+            }
+        }
+    }
+
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

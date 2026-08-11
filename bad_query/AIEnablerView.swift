@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v16 — exact-build SAE code dump"
+    @State private var log = "AI Enabler v17 — follow SAE branch targets"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -65,6 +65,10 @@ struct AIEnablerView: View {
 
                         Button("Dump SAE Gate Code (Safe)") {
                             dumpSiriGateCode()
+                        }
+
+                        Button("Dump SAE Branch Targets (Safe)") {
+                            dumpSiriGateTargets()
                         }
                     }
 
@@ -117,7 +121,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v16" }
+                            Button("Clear") { log = "AI Enabler v17" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -595,6 +599,21 @@ struct AIEnablerView: View {
         }
         appendLog("read-only memory snapshot; no gates invoked")
         appendLog("=== END EXACT-BUILD SAE CODE ===")
+    }
+
+    func dumpSiriGateTargets() {
+        appendLog("=== SAE BRANCH TARGETS ===")
+        guard let cString = siri_gate_target_dump() else {
+            appendLog("dump returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only; branch targets not invoked")
+        appendLog("=== END SAE BRANCH TARGETS ===")
     }
 
     func probeSiriGroups() {
