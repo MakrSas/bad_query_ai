@@ -141,6 +141,7 @@ Workflow: .github/workflows/build.yml
 | v20 | Refresh stale SAE cache | Calls the known cache refresh method and posts its three observed Darwin notifications |
 | v21 | Exact SAE refresh IMP dump | Captures the iOS 27 manager refresh implementation for offline disassembly |
 | v22 | SAE refresh call map | Resolves every direct call and Objective-C selector used by the iOS 27 refresh IMP |
+| v23 | Siri availability inspection | Reads the live capability structure and names its missing SAE bits |
 
 ## v7 Results
 
@@ -330,6 +331,14 @@ The captured IMP confirms a structural change in iOS 27. It first obtains a gene
 ## v22 Refresh Call Map
 
 v22 scans the exact IMP through its return instruction, decodes every direct `BL`, recognizes stripped Objective-C message-send stubs, and reconstructs their selector strings. It reports a compact offset-to-selector/symbol map and removes the obsolete 1536-byte dump action from the UI. This should identify the availability provider, field getters, and the setter receiving the failing bitmask.
+
+### v22 device result
+
+The refresh obtains `fetchSiriAvailability`, reads `allCapabilities`, `desiredOrchestrationMode`, and `isAvailable`, then writes six cache fields. Disassembly and selector mapping establish the exact device-support formula: the system-assistant capability word must contain every bit in `0x27`; visual intelligence independently requires `0x1f`. The current device fails the former comparison.
+
+## v23 Live Availability Structure
+
+v23 invokes the now-identified safe getters, captures the five-word `allCapabilities` structure using the arm64 large-structure return convention, reports orchestration mode and availability, and uses exported `NSStringFromAFSiriSystemAssistantExperienceCapabilities` / `NSStringFromAFSiriVisualIntelligenceCapabilities` formatters to name present and missing bits. The completed call-map action is removed from the UI.
 
 ## Device
 

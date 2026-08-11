@@ -968,6 +968,106 @@ char *siri_refresh_call_map(void) {
     return out;
 }
 
+typedef struct {
+    uint64_t words[5];
+} siri_capabilities_t;
+
+static void append_cf_description(char *out, size_t cap, size_t *len,
+                                  const char *label, CFTypeRef value) {
+    if (!value) {
+        *len += snprintf(out + *len, cap - *len, "%s=<nil>\n", label);
+        return;
+    }
+    CFStringRef description = CFCopyDescription(value);
+    char buffer[2048] = {0};
+    if (description && CFStringGetCString(description, buffer, sizeof(buffer),
+                                         kCFStringEncodingUTF8)) {
+        *len += snprintf(out + *len, cap - *len, "%s=%s\n", label, buffer);
+    } else {
+        *len += snprintf(out + *len, cap - *len, "%s=<unprintable>\n", label);
+    }
+    if (description) CFRelease(description);
+}
+
+char *siri_availability_probe(void) {
+    const size_t cap = 16384;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    Class manager_class = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    id manager = manager_class ? ((id (*)(id, SEL))objc_msgSend)(
+        (id)manager_class, sel_registerName("sharedManager")) : nil;
+    id availability = manager ? ((id (*)(id, SEL))objc_msgSend)(
+        manager, sel_registerName("fetchSiriAvailability")) : nil;
+    if (!availability) {
+        snprintf(out, cap, "fetchSiriAvailability=<nil>\n");
+        dlclose(assistant);
+        return out;
+    }
+
+    Class availability_class = object_getClass(availability);
+    Method all_method = class_getInstanceMethod(availability_class,
+                                                 sel_registerName("allCapabilities"));
+    Method mode_method = class_getInstanceMethod(availability_class,
+                                                  sel_registerName("desiredOrchestrationMode"));
+    len += snprintf(out + len, cap - len,
+                    "availabilityClass=%s allCapabilities.types=%s desiredMode.types=%s\n",
+                    object_getClassName(availability),
+                    all_method ? method_getTypeEncoding(all_method) : "?",
+                    mode_method ? method_getTypeEncoding(mode_method) : "?");
+
+    siri_capabilities_t capabilities =
+        ((siri_capabilities_t (*)(id, SEL))objc_msgSend)(
+            availability, sel_registerName("allCapabilities"));
+    int64_t desired_mode = ((int64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("desiredOrchestrationMode"));
+    bool available = ((bool (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("isAvailable"));
+    for (int i = 0; i < 5; i++) {
+        len += snprintf(out + len, cap - len, "allCapabilities.word%d=0x%llx\n",
+                        i, (unsigned long long)capabilities.words[i]);
+    }
+    uint64_t system_caps = capabilities.words[2];
+    uint64_t visual_caps = capabilities.words[4];
+    len += snprintf(out + len, cap - len,
+                    "systemCaps=0x%llx required=0x27 missing=0x%llx\n"
+                    "visualCaps=0x%llx required=0x1f missing=0x%llx\n"
+                    "desiredOrchestrationMode=%lld isAvailable=%d\n",
+                    (unsigned long long)system_caps,
+                    (unsigned long long)(0x27ULL & ~system_caps),
+                    (unsigned long long)visual_caps,
+                    (unsigned long long)(0x1FULL & ~visual_caps),
+                    (long long)desired_mode, available ? 1 : 0);
+
+    typedef CFTypeRef (*caps_string_fn)(uint64_t);
+    caps_string_fn system_string = (caps_string_fn)dlsym(
+        assistant, "NSStringFromAFSiriSystemAssistantExperienceCapabilities");
+    caps_string_fn visual_string = (caps_string_fn)dlsym(
+        assistant, "NSStringFromAFSiriVisualIntelligenceCapabilities");
+    if (system_string) {
+        append_cf_description(out, cap, &len, "systemCaps.description",
+                              system_string(system_caps));
+        append_cf_description(out, cap, &len, "systemMissing.description",
+                              system_string(0x27ULL & ~system_caps));
+    }
+    if (visual_string) {
+        append_cf_description(out, cap, &len, "visualCaps.description",
+                              visual_string(visual_caps));
+        append_cf_description(out, cap, &len, "visualMissing.description",
+                              visual_string(0x1FULL & ~visual_caps));
+    }
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

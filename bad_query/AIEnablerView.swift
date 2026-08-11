@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v22 — map SAE refresh calls"
+    @State private var log = "AI Enabler v23 — inspect Siri availability"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -67,8 +67,8 @@ struct AIEnablerView: View {
                             refreshSiriCache()
                         }
 
-                        Button("Map SAE Refresh Calls (Safe)") {
-                            mapSiriRefreshCalls()
+                        Button("Inspect Siri Availability") {
+                            inspectSiriAvailability()
                         }
                     }
 
@@ -121,7 +121,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v22" }
+                            Button("Clear") { log = "AI Enabler v23" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -690,6 +690,20 @@ struct AIEnablerView: View {
         }
         appendLog("read-only; calls not invoked")
         appendLog("=== END SAE REFRESH CALL MAP ===")
+    }
+
+    func inspectSiriAvailability() {
+        appendLog("=== SIRI AVAILABILITY ===")
+        guard let cString = siri_availability_probe() else {
+            appendLog("probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("=== END SIRI AVAILABILITY ===")
     }
 
     func probeSiriGroups() {
