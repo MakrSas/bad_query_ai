@@ -4,14 +4,13 @@ import WebKit
 private let mgPath = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist"
 private let mgDir = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/"
 
-// MobileGestalt keys
 private let kAICapability = "A62OafQ85EJAiiqKn4agtg"
 private let kProductType = "h9jDsbgj7xIVeIQ8S3/X3Q"
 private let kHardwareModel = "oYicEKzVTz4/CxxE05pEgQ"
 private let kCPUChip = "5pYKlGnYYBzGvAlIU8RjEQ"
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v4 — Deep Diagnostics"
+    @State private var log = "AI Enabler v5 — Eligibility Attack"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -20,37 +19,52 @@ struct AIEnablerView: View {
         NavigationStack {
             ZStack {
                 Form {
-                    Section("Apple Intelligence") {
-                        Button("Enable AI (plist + notify)") {
+                    Section("Step 1: MobileGestalt") {
+                        Button("Apply MG Spoof") {
                             isWorking = true
-                            enableAI()
+                            applyMG()
+                            isWorking = false
+                        }
+                        .disabled(isWorking)
+                    }
+
+                    Section("Step 2: Eligibility") {
+                        Button("Read Eligibility (full)") {
+                            readEligibility()
+                        }
+
+                        Button("Write Eligibility (all methods)") {
+                            isWorking = true
+                            writeEligibility()
                             isWorking = false
                         }
                         .disabled(isWorking)
 
-                        Button("Diagnostics") {
-                            runDiagnostics()
+                        Button("Set GMS Defaults") {
+                            setGMSDefaults()
                         }
                     }
 
-                    Section("Deep Scan") {
-                        Button("Scan Container Metadata") {
-                            isWorking = true
-                            deepScanContainers()
-                            isWorking = false
-                        }
-                        .disabled(isWorking)
-
-                        Button("Try Eligibility XPC") {
-                            tryEligibilityXPC()
-                        }
-                    }
-
-                    Section("Tools") {
+                    Section("Step 3: Apply") {
                         Button("Respring") {
                             showRespring = true
                         }
+                    }
 
+                    Section("Diagnostics") {
+                        Button("Quick Status") {
+                            quickStatus()
+                        }
+
+                        Button("Deep Scan") {
+                            isWorking = true
+                            deepScan()
+                            isWorking = false
+                        }
+                        .disabled(isWorking)
+                    }
+
+                    Section("Tools") {
                         Button("Revert MobileGestalt") {
                             showRevertConfirm = true
                         }
@@ -68,11 +82,9 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v4" }
+                            Button("Clear") { log = "AI Enabler v5" }
                             Spacer()
-                            Button("Copy Log") {
-                                UIPasteboard.general.string = log
-                            }
+                            Button("Copy") { UIPasteboard.general.string = log }
                         }
                     }
                 }
@@ -84,73 +96,57 @@ struct AIEnablerView: View {
             }
             .navigationTitle("AI Enabler")
             .navigationBarTitleDisplayMode(.inline)
-            .alert("Revert MobileGestalt?", isPresented: $showRevertConfirm) {
+            .alert("Revert?", isPresented: $showRevertConfirm) {
                 Button("Cancel", role: .cancel) {}
                 Button("Revert", role: .destructive) { revertMG() }
-            } message: {
-                Text("Restores backup. Reboot after.")
-            }
+            } message: { Text("Reboot after reverting.") }
         }
     }
 
-    func appendLog(_ msg: String) {
-        log.append("\n\(msg)")
-    }
+    func appendLog(_ msg: String) { log.append("\n\(msg)") }
 
-    func bqErr(_ code: Int64) -> String {
-        switch code {
-        case -1: return "dlsym"
-        case -2: return "query_create"
-        case -3: return "outside sandbox"
-        case -4: return "kernel rejected"
-        case -5: return "asprintf"
-        case -254: return "lstat"
-        case -255: return "not absolute"
-        default: return "err(\(code))"
+    func bqErr(_ c: Int64) -> String {
+        switch c {
+        case -1: return "dlsym"; case -2: return "query_create"; case -3: return "outside sandbox"
+        case -4: return "kernel rejected"; case -254: return "lstat"; case -255: return "bad path"
+        default: return "err(\(c))"
         }
     }
 
     func sandbox(_ path: String, label: String, create: Bool = false) -> Int64 {
-        var pathC = path.utf8CString.map { Int8($0) }
-        let h = bad_query(&pathC, create, nil, false)
-        if h >= 0 {
-            appendLog("[\(label)] sandbox OK (\(h))")
-        } else {
-            appendLog("[\(label)] FAIL: \(bqErr(h))")
-        }
+        var p = path.utf8CString.map { Int8($0) }
+        let h = bad_query(&p, create, nil, false)
+        if h >= 0 { appendLog("[\(label)] sandbox OK") }
+        else { appendLog("[\(label)] \(bqErr(h))") }
         return h
     }
 
-    // MARK: - MobileGestalt live API
-
     func mgStr(_ key: String) -> String? {
-        guard let cfVal = mg_copy_answer(key) else { return nil }
-        let val = Unmanaged<AnyObject>.fromOpaque(cfVal).takeRetainedValue()
-        if let s = val as? String { return s }
-        if let n = val as? NSNumber { return n.stringValue }
-        return String(describing: val)
+        guard let v = mg_copy_answer(key) else { return nil }
+        let o = Unmanaged<AnyObject>.fromOpaque(v).takeRetainedValue()
+        if let s = o as? String { return s }
+        if let n = o as? NSNumber { return n.stringValue }
+        return String(describing: o)
     }
 
-    func mgBool(_ key: String) -> Bool { mg_get_bool_answer(key) }
+    // MARK: - Step 1: MobileGestalt
 
-    // MARK: - Enable AI
-
-    func enableAI() {
-        appendLog("=== ENABLE ===")
+    func applyMG() {
+        appendLog("=== MG SPOOF ===")
         let h = sandbox(mgDir, label: "mg")
         guard h >= 0 else { return }
         defer { bad_query_release(h) }
 
         let mgURL = URL(fileURLWithPath: mgPath)
         guard let dict = NSMutableDictionary(contentsOf: mgURL) else {
-            appendLog("can't read plist"); return
+            appendLog("can't read"); return
         }
 
-        // backup
-        let backDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // backup once
+        let bdir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("backups", isDirectory: true)
-        try? FileManager.default.createDirectory(at: backDir, withIntermediateDirectories: true)
-        let saved = backDir.appendingPathComponent("SavedGestalt.plist")
+        try? FileManager.default.createDirectory(at: bdir, withIntermediateDirectories: true)
+        let saved = bdir.appendingPathComponent("SavedGestalt.plist")
         if !FileManager.default.fileExists(atPath: saved.path) {
             try? FileManager.default.copyItem(at: mgURL, to: saved)
             appendLog("backup saved")
@@ -158,7 +154,6 @@ struct AIEnablerView: View {
 
         let ce = dict["CacheExtra"] as? NSMutableDictionary ?? NSMutableDictionary()
         ce[kAICapability] = 1
-        // spoof to iPhone 15 Pro
         ce[kProductType] = "iPhone16,1"
         ce[kHardwareModel] = "D83AP"
         ce[kCPUChip] = "t8130"
@@ -166,8 +161,7 @@ struct AIEnablerView: View {
 
         do {
             let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
-            let tmp = mgURL.deletingLastPathComponent()
-                .appendingPathComponent(".\(UUID().uuidString).tmp")
+            let tmp = mgURL.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).tmp")
             try data.write(to: tmp, options: [.withoutOverwriting])
             defer { try? FileManager.default.removeItem(at: tmp) }
             if FileManager.default.fileExists(atPath: mgURL.path) {
@@ -175,229 +169,292 @@ struct AIEnablerView: View {
             } else {
                 try FileManager.default.moveItem(at: tmp, to: mgURL)
             }
-            appendLog("plist OK: AI=1, model=iPhone16,1")
+            appendLog("plist OK: AI=1, iPhone16,1/D83AP/t8130")
         } catch {
-            appendLog("plist FAIL: \(error.localizedDescription)")
+            appendLog("FAIL: \(error.localizedDescription)"); return
+        }
+
+        mg_notify_cache_changed()
+        appendLog("cache notify sent")
+        appendLog("live: AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?")")
+    }
+
+    // MARK: - Step 2: Read Eligibility
+
+    func readEligibility() {
+        appendLog("=== ELIGIBILITY READ ===")
+
+        let eligPath = "/var/db/eligibilityd/eligibility.plist"
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
+              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            appendLog("can't read eligibility.plist")
             return
         }
 
-        // notify
-        mg_notify_cache_changed()
-        appendLog("notify: cache-changed sent")
+        for key in dict.keys.sorted() {
+            guard let domain = dict[key] as? [String: Any] else { continue }
+            let answer = domain["os_eligibility_answer_t"] as? Int ?? -1
+            let answerStr = answer == 4 ? "ELIGIBLE" : answer == 2 ? "NOT ELIGIBLE" : "\(answer)"
+            appendLog("\(key): \(answerStr)")
 
-        // verify
-        Thread.sleep(forTimeInterval: 0.5)
-        appendLog("live AI=\(mgBool(kAICapability)) model=\(mgStr(kProductType) ?? "nil")")
-        appendLog("=== DONE - tap Respring ===")
-    }
-
-    // MARK: - Diagnostics
-
-    func runDiagnostics() {
-        appendLog("=== DIAG ===")
-
-        // plist
-        let h = sandbox(mgDir, label: "mg")
-        if h >= 0 {
-            if let d = NSDictionary(contentsOf: URL(fileURLWithPath: mgPath)),
-               let ce = d["CacheExtra"] as? NSDictionary {
-                appendLog("plist AI=\(ce[kAICapability] ?? "nil") model=\(ce[kProductType] ?? "nil") hw=\(ce[kHardwareModel] ?? "nil") cpu=\(ce[kCPUChip] ?? "nil")")
+            if let status = domain["status"] as? [String: Any] {
+                for (sk, sv) in status.sorted(by: { $0.key < $1.key }) {
+                    let val = sv as? Int ?? -1
+                    let marker = val == 2 ? " <<< BLOCKING" : ""
+                    appendLog("  \(sk) = \(val)\(marker)")
+                }
             }
-            bad_query_release(h)
-        }
-
-        // live
-        appendLog("live AI=\(mgBool(kAICapability)) model=\(mgStr(kProductType) ?? "nil") hw=\(mgStr(kHardwareModel) ?? "nil") cpu=\(mgStr(kCPUChip) ?? "nil")")
-
-        // eligibility file
-        let eligExists = FileManager.default.fileExists(atPath: "/var/db/eligibilityd/eligibility.plist")
-        appendLog("eligibility.plist exists=\(eligExists)")
-
-        // try to READ eligibility plist (might work even without write access)
-        if let eligData = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
-           let eligDict = try? PropertyListSerialization.propertyList(from: eligData, format: nil) as? [String: Any] {
-            appendLog("eligibility readable! keys: \(eligDict.keys.sorted().joined(separator: ", "))")
-            if let gm = eligDict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any] {
-                appendLog("GREYMATTER: \(gm)")
-            } else {
-                appendLog("no GREYMATTER domain")
+            if let ctx = domain["context"] as? [String: Any] {
+                for (ck, cv) in ctx {
+                    appendLog("  ctx.\(ck) = \(cv)")
+                }
             }
-        } else {
-            appendLog("eligibility.plist not readable from sandbox")
         }
 
         appendLog("=== END ===")
     }
 
-    // MARK: - Deep Container Scan
+    // MARK: - Step 2: Write Eligibility
 
-    func deepScanContainers() {
-        appendLog("=== DEEP SCAN ===")
-        let basePath = "/var/containers/Data/System"
+    func writeEligibility() {
+        appendLog("=== ELIGIBILITY WRITE ===")
 
-        let h = sandbox(basePath, label: "sys")
-        guard h >= 0 else {
-            appendLog("can't access System containers")
-            return
+        let eligPath = "/var/db/eligibilityd/eligibility.plist"
+
+        // First read existing
+        var existingDict: [String: Any] = [:]
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
+           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+            existingDict = dict
+            appendLog("read existing: \(dict.keys.count) domains")
         }
+
+        // Modify GREYMATTER to be eligible
+        let greymatter: [String: Any] = [
+            "context": [
+                "OS_ELIGIBILITY_CONTEXT_ELIGIBLE_DEVICE_LANGUAGES": ["en"],
+                "OS_ELIGIBILITY_CONTEXT_ELIGIBLE_SIRI_LANGUAGE": "en-US"
+            ],
+            "os_eligibility_answer_source_t": 1,
+            "os_eligibility_answer_t": 4,  // ELIGIBLE
+            "status": [
+                "OS_ELIGIBILITY_INPUT_COUNTRY_BILLING": 3,
+                "OS_ELIGIBILITY_INPUT_COUNTRY_LOCATION": 3,
+                "OS_ELIGIBILITY_INPUT_DEVICE_AND_SIRI_LANGUAGE_MATCH": 3,
+                "OS_ELIGIBILITY_INPUT_DEVICE_CLASS": 3,
+                "OS_ELIGIBILITY_INPUT_DEVICE_LANGUAGE": 3,
+                "OS_ELIGIBILITY_INPUT_DEVICE_REGION_CODE": 3,
+                "OS_ELIGIBILITY_INPUT_EXTERNAL_BOOT_DRIVE": 3,
+                "OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM": 3,  // was 2!
+                "OS_ELIGIBILITY_INPUT_SHARED_IPAD": 3,
+                "OS_ELIGIBILITY_INPUT_SIRI_LANGUAGE": 3,
+            ]
+        ]
+
+        // Also set FOUNDATION_MODELS to eligible
+        let foundationModels: [String: Any] = [
+            "os_eligibility_answer_source_t": 1,
+            "os_eligibility_answer_t": 4,
+            "status": [
+                "OS_ELIGIBILITY_INPUT_DEVICE_CLASS": 3,
+                "OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM": 3,
+            ]
+        ]
+
+        existingDict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] = greymatter
+        existingDict["OS_ELIGIBILITY_DOMAIN_FOUNDATION_MODELS"] = foundationModels
+
+        guard let writeData = try? PropertyListSerialization.data(fromPropertyList: existingDict, format: .xml, options: 0) else {
+            appendLog("serialize failed"); return
+        }
+
+        appendLog("prepared \(writeData.count) bytes, \(existingDict.keys.count) domains")
+
+        // Method 1: Direct write (might work if we have read access)
+        appendLog("[method1] direct write...")
+        do {
+            try writeData.write(to: URL(fileURLWithPath: eligPath))
+            appendLog("[method1] SUCCESS! wrote \(writeData.count) bytes")
+        } catch {
+            appendLog("[method1] \(error.localizedDescription)")
+        }
+
+        // Method 2: via bad_query sandbox extension
+        appendLog("[method2] bad_query /var/db/eligibilityd...")
+        var dirC = "/var/db/eligibilityd".utf8CString.map { Int8($0) }
+        let h = bad_query(&dirC, true, nil, false)
+        if h >= 0 {
+            appendLog("[method2] sandbox OK!")
+            do {
+                try writeData.write(to: URL(fileURLWithPath: eligPath))
+                appendLog("[method2] SUCCESS!")
+            } catch {
+                appendLog("[method2] write failed: \(error.localizedDescription)")
+            }
+            bad_query_release(h)
+        } else {
+            appendLog("[method2] \(bqErr(h))")
+        }
+
+        // Method 3: try writing to alternative location
+        let altPaths = [
+            "/var/db/os_eligibility/eligibility.plist",
+            "/var/root/Library/Preferences/com.apple.eligibilityd.plist",
+        ]
+        for (i, p) in altPaths.enumerated() {
+            appendLog("[method\(3+i)] trying \(p)...")
+            do {
+                let dir = URL(fileURLWithPath: p).deletingLastPathComponent()
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try writeData.write(to: URL(fileURLWithPath: p))
+                appendLog("[method\(3+i)] SUCCESS!")
+            } catch {
+                appendLog("[method\(3+i)] \(error.localizedDescription)")
+            }
+        }
+
+        // Method 4: try writing to SQLite datastore
+        appendLog("[method5] trying datastore.data...")
+        let dsPath = "/var/db/eligibilityd/datastore.data"
+        if let dsData = try? Data(contentsOf: URL(fileURLWithPath: dsPath)) {
+            appendLog("[method5] datastore readable, \(dsData.count) bytes")
+            // Check if it looks like SQLite
+            if dsData.count >= 16 {
+                let header = String(data: dsData.prefix(16), encoding: .ascii) ?? ""
+                appendLog("[method5] header: \(header.prefix(15))")
+            }
+        } else {
+            appendLog("[method5] datastore not readable")
+        }
+
+        // Verify
+        appendLog("[verify] re-reading eligibility...")
+        if let vData = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
+           let vDict = try? PropertyListSerialization.propertyList(from: vData, format: nil) as? [String: Any],
+           let gm = vDict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any] {
+            let answer = gm["os_eligibility_answer_t"] as? Int ?? -1
+            appendLog("[verify] GREYMATTER answer=\(answer) \(answer == 4 ? "ELIGIBLE!" : "still blocked")")
+            if let status = gm["status"] as? [String: Int] {
+                let gms = status["OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM"] ?? -1
+                appendLog("[verify] GMS=\(gms)")
+            }
+        }
+
+        appendLog("=== WRITE DONE ===")
+    }
+
+    // MARK: - GMS Defaults
+
+    func setGMSDefaults() {
+        appendLog("=== GMS DEFAULTS ===")
+
+        // Try to write GMS availability via NSUserDefaults
+        let suites = [
+            "com.apple.eligibilityd",
+            "com.apple.gms",
+            "com.apple.Preferences",
+        ]
+
+        for suite in suites {
+            guard let defaults = UserDefaults(suiteName: suite) else {
+                appendLog("[\(suite)] can't open"); continue
+            }
+
+            // Read current GMS values
+            let gmsKey = defaults.object(forKey: "com.apple.gms.availability.key")
+            appendLog("[\(suite)] gms.availability.key = \(gmsKey ?? "nil")")
+
+            // Try to set GMS as available
+            defaults.set(true, forKey: "com.apple.gms.availability.key")
+            defaults.set(["granted"], forKey: "com.apple.gms.availability.unifiedReasons")
+            defaults.set([:] as [String: Any], forKey: "com.apple.gms.availability.accessNotGrantedUseCases")
+            defaults.set(["ready"], forKey: "com.apple.gms.availability.useCaseReadiness")
+
+            let ok = defaults.synchronize()
+            appendLog("[\(suite)] wrote GMS defaults, sync=\(ok)")
+
+            // Verify
+            let after = defaults.object(forKey: "com.apple.gms.availability.key")
+            appendLog("[\(suite)] after: gms.key = \(after ?? "nil")")
+        }
+
+        appendLog("=== GMS DONE ===")
+    }
+
+    // MARK: - Quick Status
+
+    func quickStatus() {
+        appendLog("=== STATUS ===")
+        appendLog("live: AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?") cpu=\(mgStr(kCPUChip) ?? "?")")
+
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
+           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+           let gm = dict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any] {
+            let answer = gm["os_eligibility_answer_t"] as? Int ?? -1
+            let gms = (gm["status"] as? [String: Int])?["OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM"] ?? -1
+            appendLog("GREYMATTER: answer=\(answer)\(answer == 4 ? " ELIGIBLE" : " blocked") GMS=\(gms)")
+        }
+
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
+           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+           let fm = dict["OS_ELIGIBILITY_DOMAIN_FOUNDATION_MODELS"] as? [String: Any] {
+            let answer = fm["os_eligibility_answer_t"] as? Int ?? -1
+            appendLog("FOUNDATION_MODELS: answer=\(answer)")
+        }
+
+        appendLog("=== END ===")
+    }
+
+    // MARK: - Deep Scan
+
+    func deepScan() {
+        appendLog("=== DEEP SCAN ===")
+
+        let basePath = "/var/containers/Data/System"
+        let h = sandbox(basePath, label: "sys")
+        guard h >= 0 else { return }
         defer { bad_query_release(h) }
 
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: basePath) else {
             appendLog("can't list"); return
         }
 
-        appendLog("scanning \(entries.count) containers for metadata...")
-
         for entry in entries {
-            let containerPath = "\(basePath)/\(entry)"
-            let metaPaths = [
-                "\(containerPath)/.com.apple.containermanagerd.metadata.plist",
-                "\(containerPath)/.com.apple.mobile_container_manager.metadata.plist",
+            let cpath = "\(basePath)/\(entry)"
+            let metas = [
+                "\(cpath)/.com.apple.containermanagerd.metadata.plist",
+                "\(cpath)/.com.apple.mobile_container_manager.metadata.plist",
             ]
-
-            for metaPath in metaPaths {
-                if let metaData = try? Data(contentsOf: URL(fileURLWithPath: metaPath)),
-                   let meta = try? PropertyListSerialization.propertyList(from: metaData, format: nil) as? [String: Any] {
-                    let bundleId = meta["MCMMetadataIdentifier"] as? String ?? "?"
-                    let cls = meta["MCMMetadataContentClass"] as? Int ?? -1
-                    appendLog("  \(entry.prefix(8))... = \(bundleId) (class \(cls))")
-
-                    if bundleId.lowercased().contains("eligib") ||
-                       bundleId.lowercased().contains("siri") ||
-                       bundleId.lowercased().contains("intelligence") ||
-                       bundleId.lowercased().contains("greymatter") ||
-                       bundleId.lowercased().contains("assistant") {
-                        appendLog("  >>> MATCH: \(bundleId) at \(containerPath)")
-                        // try to list contents
-                        if let contents = try? FileManager.default.contentsOfDirectory(atPath: containerPath) {
-                            appendLog("  contents: \(contents.joined(separator: ", "))")
-                        }
-                    }
+            for mp in metas {
+                if let md = try? Data(contentsOf: URL(fileURLWithPath: mp)),
+                   let m = try? PropertyListSerialization.propertyList(from: md, format: nil) as? [String: Any] {
+                    let bid = m["MCMMetadataIdentifier"] as? String ?? "?"
+                    appendLog("\(entry.prefix(8)).. = \(bid)")
                     break
                 }
             }
-        }
 
-        // also scan SystemGroup with bad_query_list for deeper entries
-        appendLog("scanning SystemGroup for eligibility-related...")
-        var sgPath = "/var/containers/Shared/SystemGroup".utf8CString.map { Int8($0) }
-        if let raw = bad_query_list(&sgPath, 500000) {
-            let result = String(cString: raw)
-            free(raw)
-            let lines = result.split(separator: "\n")
-            for line in lines {
-                let l = line.lowercased()
-                if l.contains("eligib") || l.contains("greymatter") || l.contains("intelligence") || l.contains("assistant") || l.contains("siri") {
-                    appendLog("  >>> \(line)")
+            // also try to list subdirs for hints
+            if let subs = try? FileManager.default.contentsOfDirectory(atPath: cpath) {
+                let interesting = subs.filter { !$0.hasPrefix(".") && $0 != "Library" && $0 != "tmp" && $0 != "Documents" }
+                if !interesting.isEmpty {
+                    appendLog("  subs: \(interesting.joined(separator: ", "))")
                 }
             }
-            appendLog("SystemGroup: \(lines.count) total entries scanned")
         }
 
-        appendLog("=== DEEP SCAN DONE ===")
-    }
-
-    // MARK: - Eligibility XPC
-
-    func tryEligibilityXPC() {
-        appendLog("=== ELIGIBILITY PROBES ===")
-
-        // Probe 1: try to read eligibility plist with bad_query
-        let eligPath = "/var/db/eligibilityd/eligibility.plist"
-        appendLog("[probe1] trying bad_query for eligibility dir...")
-        var eligDirC = "/var/db/eligibilityd".utf8CString.map { Int8($0) }
-        let h1 = bad_query(&eligDirC, true, nil, false)
-        appendLog("[probe1] result: \(h1 >= 0 ? "OK(\(h1))" : bqErr(h1))")
-        if h1 >= 0 {
-            bad_query_release(h1)
-            // try to read/write
-            if let data = try? Data(contentsOf: URL(fileURLWithPath: eligPath)) {
-                appendLog("[probe1] READ OK! \(data.count) bytes")
-            }
-        }
-
-        // Probe 2: try via different group identifiers
-        let groupIds = [
-            "com.apple.eligibilityd",
-            "com.apple.os_eligibility",
-            "systemgroup.com.apple.eligibilityd",
-            "com.apple.daemon.eligibilityd",
-            "com.apple.tridevicesetupd",
-        ]
-
-        for gid in groupIds {
-            var gidC = gid.utf8CString.map { Int8($0) }
-            var pathC = eligPath.utf8CString.map { Int8($0) }
-
-            // try class 13 (SharedSystemData) with this group
-            let h = bad_query_ex(&pathC, true, &gidC, 13)
-            if h >= 0 {
-                appendLog("[probe2] \(gid) class=13 OK! handle=\(h)")
-                bad_query_release(h)
-            }
-
-            // try class 10 (SystemData)
-            pathC = eligPath.utf8CString.map { Int8($0) }
-            gidC = gid.utf8CString.map { Int8($0) }
-            let h2 = bad_query_ex(&pathC, true, &gidC, 10)
-            if h2 >= 0 {
-                appendLog("[probe2] \(gid) class=10 OK! handle=\(h2)")
-                bad_query_release(h2)
-            }
-        }
-
-        // Probe 3: try MobileAsset eligibility paths
-        let assetPaths = [
-            "/var/MobileAsset/AssetsV2/com_apple_MobileAsset_OSEligibility",
-            "/var/db/os_eligibility",
-            "/var/root/Library/Preferences/com.apple.eligibilityd.plist",
-            "/var/mobile/Library/Preferences/com.apple.eligibilityd.plist",
-        ]
-        for p in assetPaths {
-            let exists = FileManager.default.fileExists(atPath: p)
-            if exists {
-                appendLog("[probe3] EXISTS: \(p)")
-            }
-        }
-
-        // Probe 4: try NSUserDefaults for eligibility
-        if let defaults = UserDefaults(suiteName: "com.apple.eligibilityd") {
-            let keys = defaults.dictionaryRepresentation().keys
-            if !keys.isEmpty {
-                appendLog("[probe4] eligibilityd defaults: \(keys.joined(separator: ", "))")
-            } else {
-                appendLog("[probe4] eligibilityd defaults: empty")
-            }
-        }
-
-        // Probe 5: try to find eligibility via inode scan of /var/db/
-        appendLog("[probe5] inode scan /var/db/eligibilityd...")
-        var dbPath = "/var/db/eligibilityd".utf8CString.map { Int8($0) }
-        if let raw = bad_query_list(&dbPath, 200000) {
-            let result = String(cString: raw)
-            free(raw)
-            if !result.isEmpty {
-                appendLog("[probe5] found: \(result)")
-            } else {
-                appendLog("[probe5] empty (inode scan can't reach)")
-            }
-        } else {
-            appendLog("[probe5] bad_query_list returned nil")
-        }
-
-        appendLog("=== PROBES DONE ===")
+        appendLog("=== END ===")
     }
 
     // MARK: - Revert
 
     func revertMG() {
-        appendLog("[revert] restoring...")
         let backupURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("backups/SavedGestalt.plist")
         guard let data = try? Data(contentsOf: backupURL) else {
-            appendLog("[revert] no backup"); return
+            appendLog("no backup"); return
         }
-        let h = sandbox(mgDir, label: "revert")
+        let h = sandbox(mgDir, label: "rv")
         guard h >= 0 else { return }
         defer { bad_query_release(h) }
         let mgURL = URL(fileURLWithPath: mgPath)
@@ -406,9 +463,9 @@ struct AIEnablerView: View {
             try data.write(to: tmp, options: [.withoutOverwriting])
             defer { try? FileManager.default.removeItem(at: tmp) }
             _ = try FileManager.default.replaceItemAt(mgURL, withItemAt: tmp)
-            appendLog("[revert] OK! Reboot.")
+            appendLog("reverted! Reboot.")
         } catch {
-            appendLog("[revert] FAIL: \(error.localizedDescription)")
+            appendLog("FAIL: \(error.localizedDescription)")
         }
     }
 }
