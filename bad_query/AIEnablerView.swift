@@ -90,6 +90,10 @@ struct AIEnablerView: View {
                         Button("Probe Siri Daemon Restart Capability") {
                             probeSiriDaemonRestartCapability()
                         }
+
+                        Button("Map Siri Lifecycle Surfaces (Safe)") {
+                            mapSiriLifecycleSurfaces()
+                        }
                     }
 
                     Section("Apply") {
@@ -122,7 +126,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v43" }
+                            Button("Clear") { log = "AI Enabler v44" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -946,6 +950,19 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI DAEMON RESTART CAPABILITY ===")
+    }
+
+    func mapSiriLifecycleSurfaces() {
+        appendLog("=== SIRI LIFECYCLE SURFACES ===")
+        guard let cString = siri_lifecycle_surface_map() else {
+            appendLog("lifecycle map returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("read-only; no settings, daemon, XPC, or preference was changed")
+        appendLog("=== END SIRI LIFECYCLE SURFACES ===")
     }
 
     func probeSiriGroups() {

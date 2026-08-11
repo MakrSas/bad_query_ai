@@ -2019,6 +2019,81 @@ char *siri_daemon_exec_capability_probe(void) {
     return out;
 }
 
+// v44: inventory only the Objective-C surface already exposed by
+// AssistantServices. No client is instantiated and no selector is invoked.
+static bool siri_lifecycle_name_matches(const char *name) {
+    if (!name) return false;
+    return strcasestr(name, "refresh") || strcasestr(name, "reload") ||
+           strcasestr(name, "update") || strcasestr(name, "reset") ||
+           strcasestr(name, "availability") || strcasestr(name, "capabilit") ||
+           strcasestr(name, "language") || strcasestr(name, "locale") ||
+           strcasestr(name, "asset") || strcasestr(name, "download") ||
+           strcasestr(name, "orchestration") || strcasestr(name, "enable") ||
+           strcasestr(name, "disable") || strcasestr(name, "preference") ||
+           strcasestr(name, "notification") || strcasestr(name, "boot");
+}
+
+static bool siri_lifecycle_class_matches(const char *name) {
+    if (!name) return false;
+    return strstr(name, "AFPreferences") || strstr(name, "Siri") ||
+           strstr(name, "Assistant") || strstr(name, "Availability") ||
+           strstr(name, "Capabilities") || strstr(name, "Orchestration") ||
+           strstr(name, "Generative");
+}
+
+static void append_lifecycle_methods_for_class(Class cls, bool class_methods,
+                                               char *out, size_t cap, size_t *len) {
+    Class holder = class_methods ? object_getClass((id)cls) : cls;
+    unsigned int count = 0;
+    Method *methods = class_copyMethodList(holder, &count);
+    bool heading = false;
+    for (unsigned int i = 0; methods && i < count && *len + 512 < cap; i++) {
+        const char *selector = sel_getName(method_getName(methods[i]));
+        if (!siri_lifecycle_name_matches(selector)) continue;
+        if (!heading) {
+            *len += snprintf(out + *len, cap - *len, "[%s]\n", class_getName(cls));
+            heading = true;
+        }
+        *len += snprintf(out + *len, cap - *len, "%c %s types=%s\n",
+                         class_methods ? '+' : '-', selector,
+                         method_getTypeEncoding(methods[i]));
+    }
+    free(methods);
+}
+
+char *siri_lifecycle_surface_map(void) {
+    const size_t cap = 65536;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    const char *image = "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices";
+    void *assistant = dlopen(image, RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    unsigned int count = 0;
+    const char **names = objc_copyClassNamesForImage(image, &count);
+    len += snprintf(out + len, cap - len, "image=%s classes=%u\n", image, count);
+    unsigned int candidates = 0;
+    for (unsigned int i = 0; names && i < count && len + 2048 < cap; i++) {
+        if (!siri_lifecycle_class_matches(names[i])) continue;
+        Class cls = objc_getClass(names[i]);
+        if (!cls) continue;
+        size_t before = len;
+        append_lifecycle_methods_for_class(cls, false, out, cap, &len);
+        append_lifecycle_methods_for_class(cls, true, out, cap, &len);
+        if (len != before) candidates++;
+    }
+    free(names);
+    len += snprintf(out + len, cap - len,
+                    "matchingClasses=%u\n"
+                    "read-only; selectors were enumerated, not invoked\n",
+                    candidates);
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

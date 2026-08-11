@@ -146,6 +146,7 @@ Workflow: .github/workflows/build.yml
 | v25 | Availability source details | Compares live and preference-backed objects, reasons, modes, and missing capabilities |
 | v26 | Siri preference source map | Recovers the preference API and storage-facing selectors behind `fromPreferences` |
 | v27 | Siri preference key recovery | Decodes key/context objects, reads the raw value, and inventories setter exports |
+| v44 | Siri lifecycle-surface map | Read-only inventory of AssistantServices selectors potentially reached by a system Settings action; no daemon, XPC, or preference operation is invoked |
 
 ## v7 Results
 
@@ -525,6 +526,31 @@ v43 checks only whether standard `killall`/`launchctl` paths exist and whether t
 ### v43 device result
 
 Neither `/usr/bin/killall` nor either checked `launchctl` path exists. The sandbox denies both `process-exec` and generic signal operations. Together with v42's `proc_listpids` `EPERM`, this proves that the iLoader-sideloaded process cannot restart, signal, or enumerate Siri daemons. The session MobileGestalt spoof / stale-daemon cycle cannot be broken with process control from this app.
+
+## v44 Siri Lifecycle-Surface Map
+
+v44 is a read-only recovery step for the remaining process boundary. It enumerates only classes compiled into `AssistantServices.framework` and filters their declared selectors for lifecycle-relevant terms: availability, capability, language/locale, asset/download, orchestration, refresh/reload/update/reset, preferences, and notifications. It does not instantiate an XPC client, invoke a selector, change a preference, or interact with any daemon.
+
+The purpose is to identify the exact system-owned Settings action worth testing after the session spoof is active. A Settings action may be privileged to request a capability refresh where the sideloaded app is denied Mach lookup (error 159). It is not evidence that the sideloaded app itself has gained that entitlement.
+
+### Manual lifecycle test order
+
+1. Apply the full MobileGestalt spoof and the already verified `SiriAvailability` write.
+2. Respring; do not reboot.
+3. Enable the user-visible Developer `Internal Features` UI, then look specifically for a Siri/Apple Intelligence/System Assistant Experience/asset/capability setting.
+4. Use v44 before calling an unfamiliar private selector. Compare its selector list with the label of any system Settings control discovered.
+5. After one deliberate Settings action, immediately capture Current Siri Gates and Siri Availability. A real hit must remain true after the system action, not merely inside the app's local cache.
+
+## Reassessment of Related bad_query PoCs
+
+The four public PoCs were checked against the established iLoader boundary:
+
+| PoC | Confirmed scope | Effect on Siri path |
+|---|---|---|
+| MobileHouseArrest | Foreign app-data/app-group containers only; its special route requires the CodeDirectory identity `com.apple.mobile.MobileHouseArrest` | Does not provide `/var/preferences`, a Siri daemon entitlement, or process control. The class-13 MobileGestalt route is already used by this project and does not require that identity. |
+| Geod-MCM | A lexical traversal from geod to the same fixed MobileGestalt cache directory under `/var/containers` | Already subsumed by the working class-13 route; it is not arbitrary `/var` access. |
+| CFPrefsZeroFile | `cfprefsd` can create one selected missing, root-owned, zero-byte file through a race | Cannot replace, truncate, or supply contents for an existing FeatureFlags or Siri plist. It is not an enablement route and risks a denial of service if misused. |
+| InstallCoordination | Attacker-controlled persisted install state can cause `installcoordinationd` to follow a final symlink; the public PoC demonstrates only a scratch target in its own system group | This is the only unclosed candidate, but no proof yet establishes a safe write to a Siri preference or MobileGestalt's hardware source. Do not target a real system plist without a recoverable, separately approved validation plan. |
 
 ## Current Boundary
 
