@@ -384,6 +384,10 @@ The persistent object is `SiriAvailability` in context `com.apple.assistant.back
 
 v28 adds three focused actions. **Verify Siri Preference Setter** writes the current dictionary unchanged and reads it back, isolating the private setter ABI before any semantic change. **Apply SAE Availability** saves a durable backup in the app preferences, changes SAE capabilities from `0x34` to `0x37`, visual capabilities from `0x1e` to `0x1f`, and changes desired/current orchestration mode from FullUOD (`2`) to SAE (`4`). **Restore Siri Availability** writes the saved dictionary back. Every operation reports complete before/after dictionaries and `readbackEqual`; Verify must be run first, and Apply must not be run if verification crashes or fails equality.
 
+### v28 setter verification result
+
+The unchanged-write test completed without a crash and returned `readbackEqual=1`. The before and after dictionaries are identical, confirming the argument order and callable ABI of `_AFPreferencesSetValueForKeyWithContext` on build 24A5390f. The controlled SAE mutation can now be tested; its readback must be inspected before notifications or respring are used.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
