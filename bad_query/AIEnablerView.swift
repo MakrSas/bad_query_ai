@@ -10,7 +10,7 @@ private let kHardwareModel = "oYicEKzVTz4/CxxE05pEgQ"
 private let kCPUChip = "5pYKlGnYYBzGvAlIU8RjEQ"
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v5 — Eligibility Attack"
+    @State private var log = "AI Enabler v6 — Feature Flag Attack"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -28,40 +28,38 @@ struct AIEnablerView: View {
                         .disabled(isWorking)
                     }
 
-                    Section("Step 2: Eligibility") {
-                        Button("Read Eligibility (full)") {
-                            readEligibility()
+                    Section("Step 2: Feature Flags") {
+                        Button("Probe Private APIs") {
+                            probeAPIs()
                         }
 
-                        Button("Write Eligibility (all methods)") {
+                        Button("Set Feature Flags (all methods)") {
                             isWorking = true
-                            writeEligibility()
+                            setFeatureFlags()
                             isWorking = false
                         }
                         .disabled(isWorking)
-
-                        Button("Set GMS Defaults") {
-                            setGMSDefaults()
-                        }
                     }
 
-                    Section("Step 3: Apply") {
+                    Section("Step 3: Container Scanner") {
+                        Button("Scan System Containers") {
+                            isWorking = true
+                            scanContainers()
+                            isWorking = false
+                        }
+                        .disabled(isWorking)
+                    }
+
+                    Section("Step 4: Apply") {
                         Button("Respring") {
                             showRespring = true
                         }
                     }
 
                     Section("Diagnostics") {
-                        Button("Quick Status") {
-                            quickStatus()
+                        Button("Full Status") {
+                            fullStatus()
                         }
-
-                        Button("Deep Scan") {
-                            isWorking = true
-                            deepScan()
-                            isWorking = false
-                        }
-                        .disabled(isWorking)
                     }
 
                     Section("Tools") {
@@ -82,7 +80,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v5" }
+                            Button("Clear") { log = "AI Enabler v6" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -142,7 +140,6 @@ struct AIEnablerView: View {
             appendLog("can't read"); return
         }
 
-        // backup once
         let bdir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("backups", isDirectory: true)
         try? FileManager.default.createDirectory(at: bdir, withIntermediateDirectories: true)
@@ -179,267 +176,282 @@ struct AIEnablerView: View {
         appendLog("live: AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?")")
     }
 
-    // MARK: - Step 2: Read Eligibility
+    // MARK: - Step 2: Feature Flags
 
-    func readEligibility() {
-        appendLog("=== ELIGIBILITY READ ===")
-
-        let eligPath = "/var/db/eligibilityd/eligibility.plist"
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
-              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            appendLog("can't read eligibility.plist")
-            return
-        }
-
-        for key in dict.keys.sorted() {
-            guard let domain = dict[key] as? [String: Any] else { continue }
-            let answer = domain["os_eligibility_answer_t"] as? Int ?? -1
-            let answerStr = answer == 4 ? "ELIGIBLE" : answer == 2 ? "NOT ELIGIBLE" : "\(answer)"
-            appendLog("\(key): \(answerStr)")
-
-            if let status = domain["status"] as? [String: Any] {
-                for (sk, sv) in status.sorted(by: { $0.key < $1.key }) {
-                    let val = sv as? Int ?? -1
-                    let marker = val == 2 ? " <<< BLOCKING" : ""
-                    appendLog("  \(sk) = \(val)\(marker)")
-                }
+    func probeAPIs() {
+        appendLog("=== API PROBE ===")
+        if let cStr = probe_private_apis() {
+            let str = String(cString: cStr)
+            for line in str.split(separator: "\n") where !line.isEmpty {
+                appendLog(String(line))
             }
-            if let ctx = domain["context"] as? [String: Any] {
-                for (ck, cv) in ctx {
-                    appendLog("  ctx.\(ck) = \(cv)")
-                }
-            }
+            free(cStr)
+        } else {
+            appendLog("probe returned nil")
         }
-
         appendLog("=== END ===")
     }
 
-    // MARK: - Step 2: Write Eligibility
+    func setFeatureFlags() {
+        appendLog("=== SET FEATURE FLAGS ===")
 
-    func writeEligibility() {
-        appendLog("=== ELIGIBILITY WRITE ===")
-
-        let eligPath = "/var/db/eligibilityd/eligibility.plist"
-
-        // First read existing
-        var existingDict: [String: Any] = [:]
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
-           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
-            existingDict = dict
-            appendLog("read existing: \(dict.keys.count) domains")
-        }
-
-        // Modify GREYMATTER to be eligible
-        let greymatter: [String: Any] = [
-            "context": [
-                "OS_ELIGIBILITY_CONTEXT_ELIGIBLE_DEVICE_LANGUAGES": ["en"],
-                "OS_ELIGIBILITY_CONTEXT_ELIGIBLE_SIRI_LANGUAGE": "en-US"
-            ],
-            "os_eligibility_answer_source_t": 1,
-            "os_eligibility_answer_t": 4,  // ELIGIBLE
-            "status": [
-                "OS_ELIGIBILITY_INPUT_COUNTRY_BILLING": 3,
-                "OS_ELIGIBILITY_INPUT_COUNTRY_LOCATION": 3,
-                "OS_ELIGIBILITY_INPUT_DEVICE_AND_SIRI_LANGUAGE_MATCH": 3,
-                "OS_ELIGIBILITY_INPUT_DEVICE_CLASS": 3,
-                "OS_ELIGIBILITY_INPUT_DEVICE_LANGUAGE": 3,
-                "OS_ELIGIBILITY_INPUT_DEVICE_REGION_CODE": 3,
-                "OS_ELIGIBILITY_INPUT_EXTERNAL_BOOT_DRIVE": 3,
-                "OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM": 3,  // was 2!
-                "OS_ELIGIBILITY_INPUT_SHARED_IPAD": 3,
-                "OS_ELIGIBILITY_INPUT_SIRI_LANGUAGE": 3,
-            ]
+        let flags: [(String, String)] = [
+            ("Siri", "sae_override"),
+            ("Siri", "assistant_engine_override"),
+            ("SiriUI", "sae"),
         ]
 
-        // Also set FOUNDATION_MODELS to eligible
-        let foundationModels: [String: Any] = [
-            "os_eligibility_answer_source_t": 1,
-            "os_eligibility_answer_t": 4,
-            "status": [
-                "OS_ELIGIBILITY_INPUT_DEVICE_CLASS": 3,
-                "OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM": 3,
-            ]
-        ]
-
-        existingDict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] = greymatter
-        existingDict["OS_ELIGIBILITY_DOMAIN_FOUNDATION_MODELS"] = foundationModels
-
-        guard let writeData = try? PropertyListSerialization.data(fromPropertyList: existingDict, format: .xml, options: 0) else {
-            appendLog("serialize failed"); return
+        // Method 1: dlsym override API
+        appendLog("[M1] dlsym override...")
+        for (sub, flag) in flags {
+            let r = ff_try_set(sub, flag, true)
+            appendLog("  \(sub).\(flag): \(r == 0 ? "called" : "err(\(r))")")
         }
 
-        appendLog("prepared \(writeData.count) bytes, \(existingDict.keys.count) domains")
-
-        // Method 1: Direct write (might work if we have read access)
-        appendLog("[method1] direct write...")
-        do {
-            try writeData.write(to: URL(fileURLWithPath: eligPath))
-            appendLog("[method1] SUCCESS! wrote \(writeData.count) bytes")
-        } catch {
-            appendLog("[method1] \(error.localizedDescription)")
+        // Check after set
+        appendLog("[M1] verify...")
+        for (sub, flag) in flags {
+            let r = ff_check(sub, flag)
+            appendLog("  \(sub).\(flag) = \(r == 1 ? "ENABLED" : r == 0 ? "disabled" : "err(\(r))")")
         }
 
-        // Method 2: via bad_query sandbox extension
-        appendLog("[method2] bad_query /var/db/eligibilityd...")
-        var dirC = "/var/db/eligibilityd".utf8CString.map { Int8($0) }
-        let h = bad_query(&dirC, true, nil, false)
-        if h >= 0 {
-            appendLog("[method2] sandbox OK!")
-            do {
-                try writeData.write(to: URL(fileURLWithPath: eligPath))
-                appendLog("[method2] SUCCESS!")
-            } catch {
-                appendLog("[method2] write failed: \(error.localizedDescription)")
-            }
-            bad_query_release(h)
-        } else {
-            appendLog("[method2] \(bqErr(h))")
-        }
-
-        // Method 3: try writing to alternative location
-        let altPaths = [
-            "/var/db/os_eligibility/eligibility.plist",
-            "/var/root/Library/Preferences/com.apple.eligibilityd.plist",
-        ]
-        for (i, p) in altPaths.enumerated() {
-            appendLog("[method\(3+i)] trying \(p)...")
-            do {
-                let dir = URL(fileURLWithPath: p).deletingLastPathComponent()
-                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                try writeData.write(to: URL(fileURLWithPath: p))
-                appendLog("[method\(3+i)] SUCCESS!")
-            } catch {
-                appendLog("[method\(3+i)] \(error.localizedDescription)")
-            }
-        }
-
-        // Method 4: try writing to SQLite datastore
-        appendLog("[method5] trying datastore.data...")
-        let dsPath = "/var/db/eligibilityd/datastore.data"
-        if let dsData = try? Data(contentsOf: URL(fileURLWithPath: dsPath)) {
-            appendLog("[method5] datastore readable, \(dsData.count) bytes")
-            // Check if it looks like SQLite
-            if dsData.count >= 16 {
-                let header = String(data: dsData.prefix(16), encoding: .ascii) ?? ""
-                appendLog("[method5] header: \(header.prefix(15))")
-            }
-        } else {
-            appendLog("[method5] datastore not readable")
-        }
-
-        // Verify
-        appendLog("[verify] re-reading eligibility...")
-        if let vData = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
-           let vDict = try? PropertyListSerialization.propertyList(from: vData, format: nil) as? [String: Any],
-           let gm = vDict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any] {
-            let answer = gm["os_eligibility_answer_t"] as? Int ?? -1
-            appendLog("[verify] GREYMATTER answer=\(answer) \(answer == 4 ? "ELIGIBLE!" : "still blocked")")
-            if let status = gm["status"] as? [String: Int] {
-                let gms = status["OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM"] ?? -1
-                appendLog("[verify] GMS=\(gms)")
-            }
-        }
-
-        appendLog("=== WRITE DONE ===")
-    }
-
-    // MARK: - GMS Defaults
-
-    func setGMSDefaults() {
-        appendLog("=== GMS DEFAULTS ===")
-
-        // Try to write GMS availability via NSUserDefaults
+        // Method 2: NSUserDefaults - multiple suites
+        appendLog("[M2] NSUserDefaults...")
         let suites = [
-            "com.apple.eligibilityd",
-            "com.apple.gms",
+            "com.apple.FeatureFlags",
+            "com.apple.featureflags",
+            ".GlobalPreferences",
+            "com.apple.siri",
+            "com.apple.Siri",
+            "com.apple.assistant.support",
+            "com.apple.assistant",
+            "com.apple.SiriUI",
             "com.apple.Preferences",
+            "com.apple.siriactionsd",
         ]
-
         for suite in suites {
-            guard let defaults = UserDefaults(suiteName: suite) else {
-                appendLog("[\(suite)] can't open"); continue
+            guard let d = UserDefaults(suiteName: suite) else { continue }
+            for (_, flag) in flags {
+                d.set(["Enabled": true], forKey: flag)
+                d.set(true, forKey: flag)
             }
-
-            // Read current GMS values
-            let gmsKey = defaults.object(forKey: "com.apple.gms.availability.key")
-            appendLog("[\(suite)] gms.availability.key = \(gmsKey ?? "nil")")
-
-            // Try to set GMS as available
-            defaults.set(true, forKey: "com.apple.gms.availability.key")
-            defaults.set(["granted"], forKey: "com.apple.gms.availability.unifiedReasons")
-            defaults.set([:] as [String: Any], forKey: "com.apple.gms.availability.accessNotGrantedUseCases")
-            defaults.set(["ready"], forKey: "com.apple.gms.availability.useCaseReadiness")
-
-            let ok = defaults.synchronize()
-            appendLog("[\(suite)] wrote GMS defaults, sync=\(ok)")
-
-            // Verify
-            let after = defaults.object(forKey: "com.apple.gms.availability.key")
-            appendLog("[\(suite)] after: gms.key = \(after ?? "nil")")
+            d.set(true, forKey: "SiriCanAccessServerModels")
+            d.set(true, forKey: "AssistantEnabled")
+            let ok = d.synchronize()
+            appendLog("  \(suite): sync=\(ok)")
         }
 
-        appendLog("=== GMS DONE ===")
+        // Method 3: CFPreferences global domain
+        appendLog("[M3] CFPreferences global domain...")
+        for (_, flag) in flags {
+            let key = flag as CFString
+            CFPreferencesSetValue(key, kCFBooleanTrue, kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+        }
+        CFPreferencesSynchronize(kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+        appendLog("  global domain synced")
+
+        // Method 4: CFPreferences per-domain
+        appendLog("[M4] CFPreferences per-domain...")
+        let cfDomains: [CFString] = ["com.apple.siri" as CFString, "com.apple.assistant" as CFString, "com.apple.SiriUI" as CFString]
+        for domain in cfDomains {
+            for (_, flag) in flags {
+                CFPreferencesSetValue(flag as CFString, kCFBooleanTrue, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            }
+            CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+        }
+        appendLog("  3 domains synced")
+
+        // Method 5: Try writing Global.plist directly
+        appendLog("[M5] direct plist write...")
+        let ffPlist: [String: Any] = [
+            "Siri": [
+                "sae_override": ["Enabled": true],
+                "assistant_engine_override": ["Enabled": true],
+            ],
+            "SiriUI": [
+                "sae": ["Enabled": true],
+            ],
+        ]
+        let ffPaths = [
+            "/var/preferences/FeatureFlags/Global.plist",
+            "/private/var/preferences/FeatureFlags/Global.plist",
+        ]
+        for path in ffPaths {
+            do {
+                let data = try PropertyListSerialization.data(fromPropertyList: ffPlist, format: .xml, options: 0)
+                try data.write(to: URL(fileURLWithPath: path))
+                appendLog("  \(path): WRITTEN!")
+            } catch {
+                appendLog("  \(path): \(error.localizedDescription)")
+            }
+        }
+
+        // Method 6: bad_query traversal to FeatureFlags
+        appendLog("[M6] bad_query /var/preferences/FeatureFlags...")
+        var ffPathC = "/var/preferences/FeatureFlags".utf8CString.map { Int8($0) }
+        let hff = bad_query(&ffPathC, true, nil, false)
+        if hff >= 0 {
+            appendLog("  sandbox OK! writing...")
+            do {
+                let data = try PropertyListSerialization.data(fromPropertyList: ffPlist, format: .xml, options: 0)
+                try data.write(to: URL(fileURLWithPath: "/var/preferences/FeatureFlags/Global.plist"))
+                appendLog("  Global.plist WRITTEN!")
+            } catch {
+                appendLog("  write failed: \(error.localizedDescription)")
+            }
+            bad_query_release(hff)
+        } else {
+            appendLog("  \(bqErr(hff))")
+        }
+
+        // Method 7: Darwin notifications
+        appendLog("[M7] notifications...")
+        let notifs = [
+            "com.apple.FeatureFlags.changed",
+            "com.apple.siri.configurationChanged",
+            "com.apple.assistant.configurationChanged",
+            "com.apple.eligibility.inputChanged",
+        ]
+        for n in notifs {
+            post_darwin_notification(n)
+        }
+        appendLog("  \(notifs.count) notifications posted")
+
+        appendLog("=== FF DONE ===")
     }
 
-    // MARK: - Quick Status
+    // MARK: - Step 3: Container Scanner
 
-    func quickStatus() {
-        appendLog("=== STATUS ===")
-        appendLog("live: AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?") cpu=\(mgStr(kCPUChip) ?? "?")")
+    func scanContainers() {
+        appendLog("=== CONTAINER SCAN ===")
 
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
-           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-           let gm = dict["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any] {
-            let answer = gm["os_eligibility_answer_t"] as? Int ?? -1
-            let gms = (gm["status"] as? [String: Int])?["OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM"] ?? -1
-            appendLog("GREYMATTER: answer=\(answer)\(answer == 4 ? " ELIGIBLE" : " blocked") GMS=\(gms)")
+        let class12ids = [
+            "com.apple.geod",
+            "com.apple.siri",
+            "com.apple.Siri",
+            "com.apple.assistant",
+            "com.apple.SiriUI",
+            "com.apple.intelligenceplatformd",
+            "com.apple.IntelligencePlatform",
+            "com.apple.eligibilityd",
+            "com.apple.featureflagsd",
+            "com.apple.FeatureFlags",
+            "com.apple.Preferences",
+            "com.apple.mobileassetd",
+            "com.apple.triald",
+            "com.apple.parsec",
+            "com.apple.springboard",
+            "com.apple.languageassetd",
+            "com.apple.gms",
+            "com.apple.siriknowledged",
+            "com.apple.coreduetd",
+            "com.apple.suggestions",
+        ]
+
+        appendLog("[C12] system data:")
+        for id in class12ids {
+            var pathC = "/var/containers/Data/System".utf8CString.map { Int8($0) }
+            var idC = id.utf8CString.map { Int8($0) }
+            let h = bad_query_ex(&pathC, true, &idC, 12)
+            if h >= 0 {
+                appendLog("  \(id): ACCESS")
+                bad_query_release(h)
+            }
         }
 
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
-           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-           let fm = dict["OS_ELIGIBILITY_DOMAIN_FOUNDATION_MODELS"] as? [String: Any] {
-            let answer = fm["os_eligibility_answer_t"] as? Int ?? -1
-            appendLog("FOUNDATION_MODELS: answer=\(answer)")
+        let class13ids = [
+            "systemgroup.com.apple.siri",
+            "systemgroup.com.apple.assistant",
+            "systemgroup.com.apple.intelligenceplatform",
+            "systemgroup.com.apple.IntelligencePlatform",
+            "systemgroup.com.apple.featureflags",
+            "systemgroup.com.apple.FeatureFlags",
+            "systemgroup.com.apple.eligibilityd",
+            "systemgroup.com.apple.gms",
+            "systemgroup.com.apple.triald",
+            "systemgroup.com.apple.parsec",
+            "systemgroup.com.apple.siriknowledged",
+            "systemgroup.com.apple.lsd.iconscache",
+            "systemgroup.com.apple.mobilegestaltcache",
+        ]
+
+        appendLog("[C13] system groups:")
+        for id in class13ids {
+            var pathC = "/var/containers/Shared/SystemGroup".utf8CString.map { Int8($0) }
+            var idC = id.utf8CString.map { Int8($0) }
+            let h = bad_query_ex(&pathC, true, &idC, 13)
+            if h >= 0 {
+                appendLog("  \(id): ACCESS")
+                bad_query_release(h)
+            }
         }
 
         appendLog("=== END ===")
     }
 
-    // MARK: - Deep Scan
+    // MARK: - Diagnostics
 
-    func deepScan() {
-        appendLog("=== DEEP SCAN ===")
+    func fullStatus() {
+        appendLog("=== FULL STATUS ===")
 
-        let basePath = "/var/containers/Data/System"
-        let h = sandbox(basePath, label: "sys")
-        guard h >= 0 else { return }
-        defer { bad_query_release(h) }
+        // MobileGestalt
+        appendLog("[MG] AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?") hw=\(mgStr(kHardwareModel) ?? "?") cpu=\(mgStr(kCPUChip) ?? "?")")
 
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: basePath) else {
-            appendLog("can't list"); return
-        }
-
-        for entry in entries {
-            let cpath = "\(basePath)/\(entry)"
-            let metas = [
-                "\(cpath)/.com.apple.containermanagerd.metadata.plist",
-                "\(cpath)/.com.apple.mobile_container_manager.metadata.plist",
-            ]
-            for mp in metas {
-                if let md = try? Data(contentsOf: URL(fileURLWithPath: mp)),
-                   let m = try? PropertyListSerialization.propertyList(from: md, format: nil) as? [String: Any] {
-                    let bid = m["MCMMetadataIdentifier"] as? String ?? "?"
-                    appendLog("\(entry.prefix(8)).. = \(bid)")
-                    break
+        // Eligibility
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
+           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+            appendLog("[ELIG] \(dict.keys.count) domains")
+            for key in ["OS_ELIGIBILITY_DOMAIN_GREYMATTER", "OS_ELIGIBILITY_DOMAIN_FOUNDATION_MODELS"] {
+                if let domain = dict[key] as? [String: Any] {
+                    let answer = domain["os_eligibility_answer_t"] as? Int ?? -1
+                    let short = key.replacingOccurrences(of: "OS_ELIGIBILITY_DOMAIN_", with: "")
+                    appendLog("  \(short): answer=\(answer) \(answer == 4 ? "ELIGIBLE" : "BLOCKED")")
+                    if let status = domain["status"] as? [String: Int] {
+                        for (sk, sv) in status.sorted(by: { $0.key < $1.key }) where sv != 3 {
+                            let name = sk.replacingOccurrences(of: "OS_ELIGIBILITY_INPUT_", with: "")
+                            appendLog("    \(name) = \(sv) BLOCKING")
+                        }
+                    }
                 }
             }
+        } else {
+            appendLog("[ELIG] can't read eligibility.plist")
+        }
 
-            // also try to list subdirs for hints
-            if let subs = try? FileManager.default.contentsOfDirectory(atPath: cpath) {
-                let interesting = subs.filter { !$0.hasPrefix(".") && $0 != "Library" && $0 != "tmp" && $0 != "Documents" }
-                if !interesting.isEmpty {
-                    appendLog("  subs: \(interesting.joined(separator: ", "))")
+        // Feature flags via dlsym
+        let flags: [(String, String)] = [
+            ("Siri", "sae_override"),
+            ("Siri", "assistant_engine_override"),
+            ("SiriUI", "sae"),
+        ]
+        for (sub, flag) in flags {
+            let r = ff_check(sub, flag)
+            appendLog("[FF] \(sub).\(flag) = \(r == 1 ? "ENABLED" : r == 0 ? "disabled" : "err(\(r))")")
+        }
+
+        // Feature flags plist readable?
+        for path in ["/var/preferences/FeatureFlags/Global.plist", "/private/var/preferences/FeatureFlags/Global.plist"] {
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+               let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+                appendLog("[FF] \(path) READABLE: \(dict.keys.sorted().joined(separator: ", "))")
+                for (k, v) in dict.sorted(by: { $0.key < $1.key }) {
+                    appendLog("  \(k): \(v)")
                 }
+                break
+            }
+        }
+
+        // Asset paths
+        let assetDirs = [
+            "/var/MobileAsset/AssetsV2/com_apple_MobileAsset_OSEligibility",
+            "/var/MobileAsset/AssetsV2/com_apple_MobileAsset_Trial_Siri",
+            "/var/MobileAsset/AssetsV2/com_apple_MobileAsset_UAF_Siri",
+            "/var/MobileAsset/AssetsV2/com_apple_MobileAsset_Trial_IntelligencePlatform",
+        ]
+        for p in assetDirs {
+            if FileManager.default.fileExists(atPath: p) {
+                let name = (p as NSString).lastPathComponent
+                appendLog("[ASSET] \(name): exists")
             }
         }
 

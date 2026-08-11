@@ -254,9 +254,127 @@ void mg_notify_cache_changed(void) {
     notify_post("com.apple.MobileGestalt.cache-changed");
 }
 
-// This still works on 27.0b5
-// I'm including it here because it's very useful in the context of this sandbox escape, which can't access parent directories (most of the time)
-// This enumerates all directories in a given path, so you can, for example, get all container UUIDs, read their container metadata to get their bundle ID, and derive that entirely on-device without a computer
+void post_darwin_notification(const char *name) {
+    notify_post(name);
+}
+
+char *probe_private_apis(void) {
+    size_t cap = 8192;
+    char *out = malloc(cap);
+    if (!out) return NULL;
+    size_t len = 0;
+
+    void *ff = dlopen("/usr/lib/libFeatureFlags.dylib", RTLD_LAZY);
+    if (!ff) ff = dlopen("/System/Library/PrivateFrameworks/FeatureFlags.framework/FeatureFlags", RTLD_LAZY);
+    if (ff) {
+        len += snprintf(out + len, cap - len, "FF:loaded\n");
+        const char *syms[] = {
+            "_os_feature_enabled_impl",
+            "_os_feature_enabled_simple_impl",
+            "_os_feature_flag_get_enabled_value",
+            "os_feature_flag_override_set_bool",
+            "_os_feature_flag_override_set_bool",
+            "_os_feature_flag_override_set",
+            "os_feature_flag_set_override",
+            "_os_feature_flag_set_override",
+            "_os_feature_flag_override_get",
+            "_os_feature_flag_override_remove",
+            "_os_feature_flag_value_impl",
+            NULL
+        };
+        for (int i = 0; syms[i]; i++) {
+            if (dlsym(ff, syms[i]))
+                len += snprintf(out + len, cap - len, "FF:FOUND:%s\n", syms[i]);
+        }
+        dlclose(ff);
+    } else {
+        len += snprintf(out + len, cap - len, "FF:not_loaded:%s\n", dlerror() ? dlerror() : "unknown");
+    }
+
+    void *el = NULL;
+    const char *el_paths[] = {
+        "/System/Library/PrivateFrameworks/EligibilityCore.framework/EligibilityCore",
+        "/System/Library/PrivateFrameworks/OSEligibility.framework/OSEligibility",
+        "/usr/lib/libos_eligibility.dylib",
+        NULL
+    };
+    for (int i = 0; el_paths[i] && !el; i++)
+        el = dlopen(el_paths[i], RTLD_LAZY);
+    if (el) {
+        len += snprintf(out + len, cap - len, "EL:loaded\n");
+        const char *syms[] = {
+            "os_eligibility_check_domain",
+            "os_eligibility_check_domain_v2",
+            "os_eligibility_get_domain_answer",
+            "os_eligibility_set_domain_answer",
+            "os_eligibility_domain_set_input",
+            "os_eligibility_set_input",
+            "_os_eligibility_get_internal_state",
+            "os_eligibility_copy_answer",
+            "os_eligibility_copy_inputs_for_domain",
+            NULL
+        };
+        for (int i = 0; syms[i]; i++) {
+            if (dlsym(el, syms[i]))
+                len += snprintf(out + len, cap - len, "EL:FOUND:%s\n", syms[i]);
+        }
+        dlclose(el);
+    } else {
+        len += snprintf(out + len, cap - len, "EL:not_loaded\n");
+    }
+
+    return out;
+}
+
+int ff_try_set(const char *subsystem, const char *flag, bool value) {
+    void *ff = dlopen("/usr/lib/libFeatureFlags.dylib", RTLD_LAZY);
+    if (!ff) ff = dlopen("/System/Library/PrivateFrameworks/FeatureFlags.framework/FeatureFlags", RTLD_LAZY);
+    if (!ff) return -1;
+
+    typedef void (*set3_fn)(const char *, const char *, bool);
+    const char *names[] = {
+        "os_feature_flag_override_set_bool",
+        "_os_feature_flag_override_set_bool",
+        "_os_feature_flag_override_set",
+        "os_feature_flag_set_override",
+        "_os_feature_flag_set_override",
+        NULL
+    };
+
+    int result = -2;
+    for (int i = 0; names[i]; i++) {
+        set3_fn f = (set3_fn)dlsym(ff, names[i]);
+        if (f) {
+            f(subsystem, flag, value);
+            result = 0;
+            break;
+        }
+    }
+
+    dlclose(ff);
+    return result;
+}
+
+int ff_check(const char *subsystem, const char *flag) {
+    void *ff = dlopen("/usr/lib/libFeatureFlags.dylib", RTLD_LAZY);
+    if (!ff) ff = dlopen("/System/Library/PrivateFrameworks/FeatureFlags.framework/FeatureFlags", RTLD_LAZY);
+    if (!ff) return -1;
+
+    typedef bool (*check_fn)(const char *, const char *, int, void *);
+
+    void *sym = dlsym(ff, "_os_feature_enabled_impl");
+    if (!sym) sym = dlsym(ff, "_os_feature_enabled_simple_impl");
+
+    int result = -2;
+    if (sym) {
+        bool def = false;
+        result = ((check_fn)sym)(subsystem, flag, 0, &def) ? 1 : 0;
+    }
+
+    dlclose(ff);
+    return result;
+}
+
 char *bad_query_list(char *path, int64_t max_inode) {
     struct statfs sfs;
     if (statfs(path, &sfs) != 0) return NULL;

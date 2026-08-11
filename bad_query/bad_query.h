@@ -22,4 +22,10 @@ void *mg_copy_answer(const char *key);
 bool mg_get_bool_answer(const char *key);
 void mg_notify_cache_changed(void);
 
+// Feature flags and eligibility private API probing
+void post_darwin_notification(const char *name);
+char *probe_private_apis(void);
+int ff_try_set(const char *subsystem, const char *flag, bool value);
+int ff_check(const char *subsystem, const char *flag);
+
 #endif /* bad_query_h */
