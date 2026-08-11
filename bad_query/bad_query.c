@@ -1528,6 +1528,34 @@ char *siri_capabilities_client_runtime(void) {
     return out;
 }
 
+char *siri_capabilities_service_sync_probe(void) {
+    const size_t cap = 8192;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+    Class cls = objc_getClass("AFSiriCapabilitiesServiceClient");
+    if (!cls) { snprintf(out, cap, "clientClass=NOT_FOUND\n"); dlclose(assistant); return out; }
+    id client = ((id (*)(id, SEL))objc_msgSend)((id)cls, sel_registerName("alloc"));
+    client = client ? ((id (*)(id, SEL))objc_msgSend)(client, sel_registerName("init")) : nil;
+    if (!client) { snprintf(out, cap, "client=INIT_FAILED\n"); dlclose(assistant); return out; }
+    id before = ((id (*)(id, SEL))objc_msgSend)(client, sel_registerName("connection"));
+    append_cf_description(out, cap, &len, "connection.before", (CFTypeRef)before);
+    SEL sae_sel = sel_registerName("siriSystemAssistantExperienceEnabledSync");
+    SEL assets_sel = sel_registerName("shouldDownloadAssetsForSiriSystemAssistantExperienceSync");
+    SEL intents_sel = sel_registerName("siriWithAppIntentsEnabledSync");
+    bool sae = class_getInstanceMethod(cls, sae_sel) ? ((bool (*)(id, SEL))objc_msgSend)(client, sae_sel) : false;
+    bool assets = class_getInstanceMethod(cls, assets_sel) ? ((bool (*)(id, SEL))objc_msgSend)(client, assets_sel) : false;
+    bool intents = class_getInstanceMethod(cls, intents_sel) ? ((bool (*)(id, SEL))objc_msgSend)(client, intents_sel) : false;
+    len += snprintf(out + len, cap - len, "service.SAE=%d\nservice.shouldDownloadAssets=%d\nservice.AppIntents=%d\n", sae, assets, intents);
+    id after = ((id (*)(id, SEL))objc_msgSend)(client, sel_registerName("connection"));
+    append_cf_description(out, cap, &len, "connection.after", (CFTypeRef)after);
+    ((void (*)(id, SEL))objc_msgSend)(client, sel_registerName("release"));
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

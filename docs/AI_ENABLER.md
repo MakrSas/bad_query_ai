@@ -416,6 +416,14 @@ The inventory identified the cross-process availability path: `SOSiriCapabilitie
 
 v30 reports the complete instance/class method lists, properties, ivars, superclass, and instance size for the SO client, AF client, and status manager. It does not instantiate clients or call blocks. This determines their supported constructors/singletons and connection ownership before making an asynchronous XPC availability request.
 
+### v30 device result
+
+Both service clients are simple `NSObject` subclasses with one retained `NSXPCConnection` ivar and no custom constructor or singleton. The AF client provides safe synchronous getters for SAE enabled, asset-download eligibility, and Siri-with-App-Intents enabled. The SO client provides the asynchronous full availability request. This allows the external service state to be queried without guessing a block callback signature.
+
+## v31 Synchronous Capability Service Query
+
+v31 instantiates `AFSiriCapabilitiesServiceClient` with inherited `init` and invokes its three exact-ABI synchronous boolean getters. It reports SAE enablement, whether SAE assets should download, App Intents enablement, and the XPC connection object before and after. The probe performs no update or preference mutation.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

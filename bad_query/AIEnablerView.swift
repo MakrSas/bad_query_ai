@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v30 — inspect Siri capability clients"
+    @State private var log = "AI Enabler v31 — query Siri capability service"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Inspect Siri Capability Clients") {
-                            inspectSiriCapabilityClients()
+                        Button("Query Siri Capability Service") {
+                            querySiriCapabilityService()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v30" }
+                            Button("Clear") { log = "AI Enabler v31" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -801,6 +801,19 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI CAPABILITY CLIENT RUNTIME ===")
+    }
+
+    func querySiriCapabilityService() {
+        appendLog("=== SIRI CAPABILITY SERVICE SYNC ===")
+        guard let cString = siri_capabilities_service_sync_probe() else {
+            appendLog("service probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("read-only synchronous service query")
+        appendLog("=== END SIRI CAPABILITY SERVICE SYNC ===")
     }
 
     func probeSiriGroups() {
