@@ -396,6 +396,10 @@ The controlled mutation succeeded and returned `backup=SAVED` and `readbackEqual
 
 Without a refresh or respring, all isolated Siri gates changed to true, including `AFDeviceSupportsSAE` and `AFDeviceSupportsSystemAssistantExperience`. The live availability object reports SAE capabilities `0x37`, visual capabilities `0x1f`, desired orchestration mode `4`, and no missing system or visual capabilities. This confirms that `SiriAvailability` was the final in-process software gate and that the two previously disabled feature-flag results are represented by the persisted `GrayMatterFeatureFlagEnabled` capability bit rather than requiring direct FeatureFlags plist access.
 
+### v28 result after respring
+
+After respring, `AFDeviceSupportsSAE` and `AFDeviceSupportsSystemAssistantExperience` returned false again while the lower-level device, locale, GMS, and deprecated gates remained true. Siri retained the classic orb UI and Writing Tools still reported unavailable capabilities. The Siri startup path therefore recomputes and replaces the patched `SiriAvailability`; a preference write before respring is not persistent across the daemon startup refresh. The next test must apply the known-good dictionary after startup and notify already-running consumers, without another respring.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
