@@ -514,6 +514,14 @@ Before respring, MobileGestalt still reported the original iPhone 15 identity ev
 
 v42 lists only the PIDs visible to the app for `assistantd`, `siriknowledged`, `generativeexperiencesd`, and SpringBoard, then calls `kill(pid, 0)` as a non-mutating permission check. It never sends a real signal. The result determines whether a later, separately authorised daemon-restart test can reload session-spoofed MobileGestalt without a device reboot.
 
+### v42 device result
+
+`proc_listpids` failed with `EPERM`, so the sideloaded sandbox cannot enumerate daemon PIDs. No signal was attempted. A direct PID-based restart is not available unless a separate process-control capability can be established.
+
+## v43 Daemon Restart Capability Probe
+
+v43 checks only whether standard `killall`/`launchctl` paths exist and whether the current sandbox reports `process-exec` or generic signal operations as allowed. It does not launch a command or send a signal. This completes the process-control feasibility check before any user-mediated daemon restart attempt is considered.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v42 — probe Siri daemon control"
+    @State private var log = "AI Enabler v43 — probe daemon restart capability"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -87,8 +87,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Probe Siri Daemon Control") {
-                            probeSiriDaemonControl()
+                        Button("Probe Siri Daemon Restart Capability") {
+                            probeSiriDaemonRestartCapability()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v42" }
+                            Button("Clear") { log = "AI Enabler v43" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -934,6 +934,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI DAEMON CONTROL PROBE ===")
+    }
+
+    func probeSiriDaemonRestartCapability() {
+        appendLog("=== SIRI DAEMON RESTART CAPABILITY ===")
+        guard let cString = siri_daemon_exec_capability_probe() else {
+            appendLog("restart capability probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI DAEMON RESTART CAPABILITY ===")
     }
 
     func probeSiriGroups() {
