@@ -388,6 +388,10 @@ v28 adds three focused actions. **Verify Siri Preference Setter** writes the cur
 
 The unchanged-write test completed without a crash and returned `readbackEqual=1`. The before and after dictionaries are identical, confirming the argument order and callable ABI of `_AFPreferencesSetValueForKeyWithContext` on build 24A5390f. The controlled SAE mutation can now be tested; its readback must be inspected before notifications or respring are used.
 
+### v28 apply result
+
+The controlled mutation succeeded and returned `backup=SAVED` and `readbackEqual=1`. The persisted SAE capability word changed from decimal `52` (`0x34`) to `55` (`0x37`), visual intelligence from `30` (`0x1e`) to `31` (`0x1f`), and current/desired/desired-if-enabled orchestration modes all changed from FullUOD (`2`) to SAE (`4`). Availability remains enabled with no restriction or unavailability reasons. No notification, cache refresh, or respring had been performed when this result was captured.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
