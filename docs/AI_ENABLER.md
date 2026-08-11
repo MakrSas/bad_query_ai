@@ -472,6 +472,14 @@ The iPhone implementation is in `/System/Library/PrivateFrameworks/AssistantServ
 
 v37 resolves likely exported spellings of the dedicated Siri availability setter, reports its image/offset, decodes direct call and selector targets, and includes a compact exact-build code dump. It does not invoke the setter. The goal is to recover its argument ABI and determine whether it publishes the capability-change notification missing from the generic preference write.
 
+### v37 device result
+
+`_AFPreferencesSetSiriAvailability` is exported at AssistantServices offset `0x8d3f8`. Its prologue forwards the single object argument in `x0` to the generic preference setter with static key/context arguments. It then calls `AFBackedUpPreferencesSynchronize` and posts an in-process notification through `NSNotificationCenter`; a second path also reads `languageCode`, synchronizes, and posts. The function therefore has a confirmed one-object ABI and adds Siri-specific synchronization absent from v28.
+
+## v38 Dedicated Availability Apply
+
+v38 creates the known-good patched preference dictionary, obtains a validated `AFSiriAvailability` through `fromPreferences`, passes it to `_AFPreferencesSetSiriAvailability`, reads it back, and refreshes the local status manager. It reports the complete before/after objects and final local SAE booleans. No respring or direct XPC lookup is used.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

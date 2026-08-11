@@ -1845,6 +1845,40 @@ char *siri_dedicated_setter_map(void) {
     dlclose(assistant); return out;
 }
 
+char *siri_dedicated_setter_apply(void) {
+    const size_t cap = 32768;
+    char *out = calloc(1, cap); if (!out) return NULL;
+    size_t len = 0;
+    // First create the already verified patched dictionary and durable backup.
+    char *generic_result = siri_preferences_write(1);
+    if (generic_result) {
+        len += snprintf(out + len, cap - len, "generic.apply=%s\n", strstr(generic_result, "readbackEqual=1") ? "OK" : "FAILED");
+        free(generic_result);
+    }
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out + len, cap - len, "AssistantServices=NOT_LOADED\n"); return out; }
+    typedef void (*dedicated_fn)(id);
+    dedicated_fn setter = (dedicated_fn)dlsym(assistant, "_AFPreferencesSetSiriAvailability");
+    Class availability_class = objc_getClass("AFSiriAvailability");
+    id availability = availability_class ? ((id (*)(id, SEL))objc_msgSend)((id)availability_class, sel_registerName("fromPreferences")) : nil;
+    if (!setter || !availability) {
+        len += snprintf(out + len, cap - len, "setter=%s availability=%s\n", setter ? "OK" : "MISSING", availability ? "OK" : "NIL");
+        dlclose(assistant); return out;
+    }
+    append_cf_description(out, cap, &len, "object.beforeDedicatedSet", (CFTypeRef)availability);
+    setter(availability);
+    len += snprintf(out + len, cap - len, "dedicatedSetter=CALLED\n");
+    id after = ((id (*)(id, SEL))objc_msgSend)((id)availability_class, sel_registerName("fromPreferences"));
+    append_cf_description(out, cap, &len, "object.afterDedicatedSet", (CFTypeRef)after);
+    Class manager_class = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    id manager = manager_class ? ((id (*)(id, SEL))objc_msgSend)((id)manager_class, sel_registerName("sharedManager")) : nil;
+    if (manager) ((void (*)(id, SEL))objc_msgSend)(manager, sel_registerName("fetchGenerativeModelsAvailability"));
+    bool device = manager ? ((bool (*)(id, SEL))objc_msgSend)(manager, sel_registerName("deviceSupportsSAE")) : false;
+    bool enabled = manager ? ((bool (*)(id, SEL))objc_msgSend)(manager, sel_registerName("saeEnabled")) : false;
+    len += snprintf(out + len, cap - len, "manager.deviceSupportsSAE=%d\nmanager.saeEnabled=%d\n", device, enabled);
+    dlclose(assistant); return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.
