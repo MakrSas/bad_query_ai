@@ -1879,6 +1879,41 @@ char *siri_dedicated_setter_apply(void) {
     dlclose(assistant); return out;
 }
 
+char *siri_feature_input_runtime_map(void) {
+    const size_t cap = 65536;
+    char *out = calloc(1, cap); if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+    const char *names[] = { "SAEFeatureFlagSet", "AFFeatureFlags", "GMAvailabilityWrapper", NULL };
+    for (int n = 0; names[n] && len + 2048 < cap; n++) {
+        Class cls = objc_getClass(names[n]);
+        if (!cls) { len += snprintf(out + len, cap - len, "[%s] NOT_FOUND\n", names[n]); continue; }
+        Class super = class_getSuperclass(cls);
+        len += snprintf(out + len, cap - len, "[%s] instanceSize=%zu superclass=%s\n", names[n], class_getInstanceSize(cls), super ? class_getName(super) : "-");
+        unsigned int count = 0;
+        Method *methods = class_copyMethodList(cls, &count);
+        for (unsigned int i = 0; i < count && len + 512 < cap; i++)
+            len += snprintf(out + len, cap - len, "- %s types=%s\n", sel_getName(method_getName(methods[i])), method_getTypeEncoding(methods[i]));
+        free(methods);
+        Class meta = object_getClass((id)cls);
+        methods = class_copyMethodList(meta, &count);
+        for (unsigned int i = 0; i < count && len + 512 < cap; i++)
+            len += snprintf(out + len, cap - len, "+ %s types=%s\n", sel_getName(method_getName(methods[i])), method_getTypeEncoding(methods[i]));
+        free(methods);
+        objc_property_t *props = class_copyPropertyList(cls, &count);
+        for (unsigned int i = 0; i < count && len + 512 < cap; i++)
+            len += snprintf(out + len, cap - len, "property %s attrs=%s\n", property_getName(props[i]), property_getAttributes(props[i]));
+        free(props);
+        Ivar *ivars = class_copyIvarList(cls, &count);
+        for (unsigned int i = 0; i < count && len + 512 < cap; i++)
+            len += snprintf(out + len, cap - len, "ivar %s type=%s offset=%td\n", ivar_getName(ivars[i]), ivar_getTypeEncoding(ivars[i]), ivar_getOffset(ivars[i]));
+        free(ivars);
+    }
+    len += snprintf(out + len, cap - len, "read-only; feature inputs not invoked\n");
+    dlclose(assistant); return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

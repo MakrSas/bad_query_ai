@@ -494,6 +494,10 @@ A full reboot regenerated the hardware-derived MobileGestalt cache and removed t
 
 The remaining viable technical paths are: a persistent write to the underlying MobileGestalt source rather than `CacheExtra`; a permitted way to restart `assistantd` while the session spoof remains in place; or an Apple-granted/private Mach lookup entitlement for the capability service. A normally iLoader-sideloaded app has none of these privileges, and direct capability-service update attempts are rejected with sandbox error 159.
 
+## v40 Feature-Input Runtime Map
+
+v40 inspects the runtime metadata of the exact `assistantd` capability inputs named in its binary strings: `SAEFeatureFlagSet`, `AFFeatureFlags`, and `GMAvailabilityWrapper`. It lists methods, class methods, properties, and ivars without creating objects or calling private selectors. This is the remaining low-risk route to find a writable in-process preference/input API that avoids direct access to the protected FeatureFlags plist.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

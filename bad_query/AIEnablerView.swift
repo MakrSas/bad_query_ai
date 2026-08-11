@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v39 — safe Siri diagnostics"
+    @State private var log = "AI Enabler v40 — inspect Siri feature inputs"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -86,6 +86,12 @@ struct AIEnablerView: View {
                         }
                     }
 
+                    Section("Research") {
+                        Button("Inspect Siri Feature Inputs") {
+                            inspectSiriFeatureInputs()
+                        }
+                    }
+
                     Section("Apply") {
                         Button("Respring") {
                             showRespring = true
@@ -116,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v39" }
+                            Button("Clear") { log = "AI Enabler v40" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -892,6 +898,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END DEDICATED SIRI AVAILABILITY APPLY ===")
+    }
+
+    func inspectSiriFeatureInputs() {
+        appendLog("=== SIRI FEATURE INPUT RUNTIME ===")
+        guard let cString = siri_feature_input_runtime_map() else {
+            appendLog("feature runtime map returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI FEATURE INPUT RUNTIME ===")
     }
 
     func probeSiriGroups() {
