@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v20 — refresh stale SAE cache"
+    @State private var log = "AI Enabler v21 — exact SAE refresh method"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -65,6 +65,10 @@ struct AIEnablerView: View {
 
                         Button("Refresh SAE Cache") {
                             refreshSiriCache()
+                        }
+
+                        Button("Dump SAE Refresh Method (Safe)") {
+                            dumpSiriRefreshMethod()
                         }
                     }
 
@@ -117,7 +121,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v20" }
+                            Button("Clear") { log = "AI Enabler v21" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -656,6 +660,21 @@ struct AIEnablerView: View {
         }
         appendLog("if after values are TRUE, respring next")
         appendLog("=== END REFRESH SAE CACHE ===")
+    }
+
+    func dumpSiriRefreshMethod() {
+        appendLog("=== SAE REFRESH METHOD CODE ===")
+        guard let cString = siri_refresh_method_dump() else {
+            appendLog("dump returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only; IMP not invoked by dump")
+        appendLog("=== END SAE REFRESH METHOD CODE ===")
     }
 
     func probeSiriGroups() {

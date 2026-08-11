@@ -860,6 +860,54 @@ char *siri_refresh_sae_cache(void) {
     return out;
 }
 
+char *siri_refresh_method_dump(void) {
+    const size_t cap = 65536;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    Class cls = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    SEL selector = sel_registerName("fetchGenerativeModelsAvailability");
+    Method method = cls ? class_getInstanceMethod(cls, selector) : NULL;
+    if (!method) {
+        snprintf(out, cap, "method=NOT_FOUND\n");
+        dlclose(assistant);
+        return out;
+    }
+    IMP implementation = method_getImplementation(method);
+    void *code = (void *)implementation;
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+    code = ptrauth_strip(code, ptrauth_key_function_pointer);
+#endif
+    Dl_info info = {0};
+    dladdr(code, &info);
+    uintptr_t address = (uintptr_t)code;
+    uintptr_t base = (uintptr_t)info.dli_fbase;
+    len += snprintf(out + len, cap - len,
+                    "method=-[AFSystemAssistantExperienceStatusManager fetchGenerativeModelsAvailability]\n"
+                    "address=0x%llx imageOffset=0x%llx types=%s\n",
+                    (unsigned long long)address,
+                    (unsigned long long)(base ? address - base : 0),
+                    method_getTypeEncoding(method));
+    const unsigned char *p = (const unsigned char *)code;
+    for (size_t offset = 0; offset < 1536 && len + 80 < cap; offset += 16) {
+        len += snprintf(out + len, cap - len, "%04llx:",
+                        (unsigned long long)offset);
+        for (size_t j = 0; j < 16; j++)
+            len += snprintf(out + len, cap - len, "%02x", p[offset + j]);
+        len += snprintf(out + len, cap - len, "\n");
+    }
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

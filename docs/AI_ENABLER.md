@@ -139,6 +139,7 @@ Workflow: .github/workflows/build.yml
 | v18 | Hidden SAE selector recovery | Resolves Objective-C receiver and selector names behind the iOS 27 export stubs |
 | v19 | Deprecated SAE dependency recovery | Decomposes the cached device-support source into its three internal predicates |
 | v20 | Refresh stale SAE cache | Calls the known cache refresh method and posts its three observed Darwin notifications |
+| v21 | Exact SAE refresh IMP dump | Captures the iOS 27 manager refresh implementation for offline disassembly |
 
 ## v7 Results
 
@@ -312,6 +313,14 @@ Exact-build v17 bytes show `AFDeviceSupportsSAEDeprecated()` computes the AND of
 ## v20 SAE Cache Refresh
 
 v20 calls the recovered instance method `-[AFSystemAssistantExperienceStatusManager fetchGenerativeModelsAvailability]` in the app process, records `AFDeviceSupportsSAE` and System Assistant Experience before and after, and posts the three Darwin notifications observed in the manager implementation: Siri orchestration capabilities, GMS availability, and GreyMatter eligibility change. This tests whether the now-true deprecated gate can update the cache and asks listening Siri processes to perform the same refresh. The completed selector/dependency research buttons are removed from the UI.
+
+### v20 device result
+
+The method was present and called, and all three `notify_post` operations returned success. Nevertheless, both cached values stayed false before and after refresh. The target iOS 27 implementation therefore does not populate the cache exactly like the recovered iOS 26.1 method, or it incorporates an additional availability input. Notification delivery is not the immediate blocker.
+
+## v21 Exact Refresh Implementation
+
+v21 resolves the Objective-C instance method at runtime with `class_getInstanceMethod`, strips arm64e authentication from its IMP, reports its exact image-relative address and type encoding, and copies 1536 bytes for offline ARM64 disassembly. This is read-only and does not invoke the IMP. The goal is to recover the exact values written by 24A5390f rather than continue from the older implementation.
 
 ## Device
 
