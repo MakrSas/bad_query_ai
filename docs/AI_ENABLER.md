@@ -392,6 +392,10 @@ The unchanged-write test completed without a crash and returned `readbackEqual=1
 
 The controlled mutation succeeded and returned `backup=SAVED` and `readbackEqual=1`. The persisted SAE capability word changed from decimal `52` (`0x34`) to `55` (`0x37`), visual intelligence from `30` (`0x1e`) to `31` (`0x1f`), and current/desired/desired-if-enabled orchestration modes all changed from FullUOD (`2`) to SAE (`4`). Availability remains enabled with no restriction or unavailability reasons. No notification, cache refresh, or respring had been performed when this result was captured.
 
+### v28 gate result after apply
+
+Without a refresh or respring, all isolated Siri gates changed to true, including `AFDeviceSupportsSAE` and `AFDeviceSupportsSystemAssistantExperience`. The live availability object reports SAE capabilities `0x37`, visual capabilities `0x1f`, desired orchestration mode `4`, and no missing system or visual capabilities. This confirms that `SiriAvailability` was the final in-process software gate and that the two previously disabled feature-flag results are represented by the persisted `GrayMatterFeatureFlagEnabled` capability bit rather than requiring direct FeatureFlags plist access.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
