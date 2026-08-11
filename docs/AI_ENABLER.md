@@ -541,6 +541,15 @@ The purpose is to identify the exact system-owned Settings action worth testing 
 4. Use v44 before calling an unfamiliar private selector. Compare its selector list with the label of any system Settings control discovered.
 5. After one deliberate Settings action, immediately capture Current Siri Gates and Siri Availability. A real hit must remain true after the system action, not merely inside the app's local cache.
 
+### v44 device result
+
+The Developer `Internal Features` UI exposed no relevant Apple Intelligence or System Assistant Experience control. The runtime map instead identified two normal Siri Settings paths with exact Objective-C type encodings:
+
+- `AFPreferences -setAssistantIsEnabled:` (`v20@0:8B16`) together with `_registerForAssistantEnablementChangeNotifications` and `_assistantEnablementDidChangeExternally`;
+- `AFPreferences -setLanguageCode:` (`v24@0:8@16`) together with `_registerForLanguageCodeChangeNotifications`, `_languageCodeDidChangeExternally`, and `synchronizeVoiceServicesLanguageCode`.
+
+These are stronger lifecycle candidates than Developer-only UI toggles: their real Settings controls must propagate a change to the Siri stack. The next experiment must use Settings, not an app-local invocation: apply the session spoof and availability write, respring, then perform exactly one reversible action (first disable/enable Siri; separately, change Siri language and return it to `en-US`). Do not reboot. After each action, test the visual Siri UI and capture Current Siri Gates plus Siri Availability.
+
 ## Reassessment of Related bad_query PoCs
 
 The four public PoCs were checked against the established iLoader boundary:
