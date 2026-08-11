@@ -488,6 +488,12 @@ The dedicated call crashed because the thunk expects the raw preference dictiona
 
 v39 removes the crashing dedicated-setter action and retains only the verified dictionary apply/restore and read-only diagnostics. A respring restarts SpringBoard but can leave `assistantd` alive with its pre-spoof MobileGestalt/feature cache. The next system-level test is a full reboot with the persistent MobileGestalt spoof in place, followed by gate and availability inspection before any manual preference patch.
 
+### v39 full-reboot result
+
+A full reboot regenerated the hardware-derived MobileGestalt cache and removed the session spoof. The resulting gates were all false at the identity-dependent layers: `SAEByDeviceCapabilityAndFeatureFlags`, `HasGMSCapabilityUnembargoed`, and `DeviceSupportsSAEDeprecated`, as well as the final SAE/system-experience gates. This proves the current exploit's MobileGestalt write survives respring but not boot. It also explains the impasse: respring preserves the spoof but need not restart `assistantd`; reboot restarts `assistantd` but destroys the spoof before it can be observed.
+
+The remaining viable technical paths are: a persistent write to the underlying MobileGestalt source rather than `CacheExtra`; a permitted way to restart `assistantd` while the session spoof remains in place; or an Apple-granted/private Mach lookup entitlement for the capability service. A normally iLoader-sideloaded app has none of these privileges, and direct capability-service update attempts are rejected with sandbox error 159.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
