@@ -474,11 +474,19 @@ v37 resolves likely exported spellings of the dedicated Siri availability setter
 
 ### v37 device result
 
-`_AFPreferencesSetSiriAvailability` is exported at AssistantServices offset `0x8d3f8`. Its prologue forwards the single object argument in `x0` to the generic preference setter with static key/context arguments. It then calls `AFBackedUpPreferencesSynchronize` and posts an in-process notification through `NSNotificationCenter`; a second path also reads `languageCode`, synchronizes, and posts. The function therefore has a confirmed one-object ABI and adds Siri-specific synchronization absent from v28.
+`_AFPreferencesSetSiriAvailability` is exported at AssistantServices offset `0x8d3f8`. Re-analysis after the v38 crash shows that the instruction at `+0x10` is an unconditional tail branch, not a call. The setter is only a short thunk that forwards `x0` plus static key/context arguments to the generic preference setter. Bytes from `+0x14` onward belong to the adjacent function; the apparent synchronize/notification calls were not part of this setter.
 
 ## v38 Dedicated Availability Apply
 
 v38 creates the known-good patched preference dictionary, obtains a validated `AFSiriAvailability` through `fromPreferences`, passes it to `_AFPreferencesSetSiriAvailability`, reads it back, and refreshes the local status manager. It reports the complete before/after objects and final local SAE booleans. No respring or direct XPC lookup is used.
+
+### v38 device result and correction
+
+The dedicated call crashed because the thunk expects the raw preference dictionary, not an `AFSiriAvailability` object. The verified generic apply completed before that call, so no malformed value was written. The dangerous action is removed in v39. This also establishes that the dedicated symbol offers no cross-process synchronization advantage over v28.
+
+## v39 Safe Diagnostics and Daemon-Restart Test
+
+v39 removes the crashing dedicated-setter action and retains only the verified dictionary apply/restore and read-only diagnostics. A respring restarts SpringBoard but can leave `assistantd` alive with its pre-spoof MobileGestalt/feature cache. The next system-level test is a full reboot with the persistent MobileGestalt spoof in place, followed by gate and availability inspection before any manual preference patch.
 
 ## Device
 

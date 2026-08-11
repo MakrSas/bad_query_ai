@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v38 — apply dedicated Siri setter"
+    @State private var log = "AI Enabler v39 — safe Siri diagnostics"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -80,12 +80,6 @@ struct AIEnablerView: View {
                         }
                     }
 
-                    Section("Research") {
-                        Button("Apply via Dedicated Siri Setter") {
-                            applyDedicatedSiriSetter()
-                        }
-                    }
-
                     Section("Assets") {
                         Button("Probe AI/Siri Assets (Safe)") {
                             probeAIAssets()
@@ -122,7 +116,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v38" }
+                            Button("Clear") { log = "AI Enabler v39" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
