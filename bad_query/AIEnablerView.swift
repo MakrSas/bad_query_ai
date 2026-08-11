@@ -3,8 +3,26 @@ import WebKit
 
 private let mgPath = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist"
 private let mgDir = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/"
-private let eligPath = "/var/db/eligibilityd/eligibility.plist"
-private let ffPath = "/var/preferences/FeatureFlags/Global.plist"
+
+// eligibility paths to try (in order)
+private let eligPaths: [(path: String, create: Bool, label: String)] = [
+    ("/var/db/eligibilityd/eligibility.plist", true, "eligibilityd-db"),
+    ("/var/containers/Data/System/com.apple.eligibilityd/Library/Caches/NeverRestore/eligibility_overrides.data", true, "eligibilityd-container"),
+    ("/var/db/os_eligibility/eligibility.plist", true, "os_eligibility-db"),
+]
+
+// feature flag paths to try
+private let ffPaths: [(path: String, create: Bool, label: String)] = [
+    ("/var/preferences/FeatureFlags/Global.plist", true, "featureflags-preferences"),
+]
+
+// container classes to try for eligibility
+private let eligContainers: [(identifier: String, cls: UInt64, label: String)] = [
+    ("com.apple.eligibilityd", 10, "SystemData-10"),
+    ("com.apple.eligibilityd", 12, "InternalDaemon-12"),
+    ("com.apple.eligibilityd", 15, "SystemShared-15"),
+    ("systemgroup.com.apple.eligibilityd", 13, "SharedSystemData-13"),
+]
 
 struct AIEnablerView: View {
     @State private var log = "Apple Intelligence Enabler\nAll-in-one: MobileGestalt + Eligibility + FeatureFlags"
@@ -80,41 +98,53 @@ struct AIEnablerView: View {
 
     // MARK: - Sandbox helpers
 
-    func acquireSandbox(_ path: String, label: String) -> Int64 {
+    func bqErrorString(_ code: Int64) -> String {
+        switch code {
+        case -1: return "failed to resolve functions"
+        case -2: return "failed to create sandbox query"
+        case -3: return "outside containermanager sandbox"
+        case -4: return "kernel rejected sandbox query"
+        case -5: return "asprintf failed"
+        case -254: return "file not found (lstat)"
+        case -255: return "not absolute path"
+        default: return "unknown error \(code)"
+        }
+    }
+
+    func acquireSandbox(_ path: String, label: String, create: Bool = false) -> Int64 {
         var pathC = path.utf8CString.map { Int8($0) }
-        let handle = bad_query(&pathC, false, nil, false)
+        let handle = bad_query(&pathC, create, nil, false)
         if handle >= 0 {
             appendLog("[\(label)] sandbox OK (handle: \(handle))")
         } else {
-            let reason: String
-            switch handle {
-            case -1: reason = "failed to resolve functions"
-            case -2: reason = "failed to create sandbox query"
-            case -3: reason = "outside containermanager sandbox"
-            case -4: reason = "kernel rejected sandbox query"
-            default: reason = "unknown error \(handle)"
-            }
-            appendLog("[\(label)] sandbox FAILED: \(reason)")
+            appendLog("[\(label)] sandbox FAILED: \(bqErrorString(handle))")
         }
         return handle
     }
 
-    func writeFileViaBQ(path: String, data: Data, label: String) -> Bool {
-        let handle = acquireSandbox(path, label: label)
-        guard handle >= 0 else { return false }
+    func acquireSandboxEx(_ path: String, identifier: String, containerClass: UInt64, label: String) -> Int64 {
+        var pathC = path.utf8CString.map { Int8($0) }
+        var idC = identifier.utf8CString.map { Int8($0) }
+        let handle = bad_query_ex(&pathC, true, &idC, containerClass)
+        if handle >= 0 {
+            appendLog("[\(label)] sandbox OK via class \(containerClass) (handle: \(handle))")
+        } else {
+            appendLog("[\(label)] class \(containerClass) FAILED: \(bqErrorString(handle))")
+        }
+        return handle
+    }
 
+    func writeToPath(_ path: String, data: Data, label: String) -> Bool {
         let url = URL(fileURLWithPath: path)
         let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         do {
             try data.write(to: url)
-            appendLog("[\(label)] wrote \(data.count) bytes")
-            bad_query_release(handle)
+            appendLog("[\(label)] wrote \(data.count) bytes to \(path)")
             return true
         } catch {
             appendLog("[\(label)] write FAILED: \(error.localizedDescription)")
-            bad_query_release(handle)
             return false
         }
     }
@@ -226,7 +256,33 @@ struct AIEnablerView: View {
             return false
         }
 
-        return writeFileViaBQ(path: eligPath, data: data, label: "eligibility")
+        appendLog("[eligibility] trying path traversal strategies...")
+
+        // Strategy 1: try standard bad_query with create=true for each path
+        for entry in eligPaths {
+            let handle = acquireSandbox(entry.path, label: entry.label, create: entry.create)
+            if handle >= 0 {
+                let ok = writeToPath(entry.path, data: data, label: entry.label)
+                bad_query_release(handle)
+                if ok { return true }
+            }
+        }
+
+        // Strategy 2: try different container classes via bad_query_ex
+        appendLog("[eligibility] trying container class strategies...")
+        for container in eligContainers {
+            for entry in eligPaths {
+                let handle = acquireSandboxEx(entry.path, identifier: container.identifier, containerClass: container.cls, label: "\(entry.label)/\(container.label)")
+                if handle >= 0 {
+                    let ok = writeToPath(entry.path, data: data, label: "\(entry.label)/\(container.label)")
+                    bad_query_release(handle)
+                    if ok { return true }
+                }
+            }
+        }
+
+        appendLog("[eligibility] all strategies failed")
+        return false
     }
 
     // MARK: - Step 3: Feature Flags
@@ -242,25 +298,45 @@ struct AIEnablerView: View {
             ]
         ]
 
-        // try to read and merge with existing
-        var merged = newFlags
-        var readPathC = ffPath.utf8CString.map { Int8($0) }
-        let readHandle = bad_query(&readPathC, false, nil, false)
-        if readHandle >= 0 {
-            if let existingData = try? Data(contentsOf: URL(fileURLWithPath: ffPath)),
-               let existing = try? PropertyListSerialization.propertyList(from: existingData, format: nil) as? [String: Any] {
-                appendLog("[featureflags] merging with existing Global.plist")
-                merged = mergeDict(base: existing, overlay: newFlags)
-            }
-            bad_query_release(readHandle)
-        }
-
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: merged, format: .xml, options: 0) else {
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: newFlags, format: .xml, options: 0) else {
             appendLog("[featureflags] failed to serialize")
             return false
         }
 
-        return writeFileViaBQ(path: ffPath, data: data, label: "featureflags")
+        appendLog("[featureflags] trying strategies...")
+
+        // Strategy 1: standard bad_query with create=true
+        for entry in ffPaths {
+            let handle = acquireSandbox(entry.path, label: entry.label, create: entry.create)
+            if handle >= 0 {
+                // try to merge with existing
+                var writeData = data
+                if let existingData = try? Data(contentsOf: URL(fileURLWithPath: entry.path)),
+                   let existing = try? PropertyListSerialization.propertyList(from: existingData, format: nil) as? [String: Any] {
+                    appendLog("[\(entry.label)] merging with existing")
+                    let merged = mergeDict(base: existing, overlay: newFlags)
+                    writeData = (try? PropertyListSerialization.data(fromPropertyList: merged, format: .xml, options: 0)) ?? data
+                }
+                let ok = writeToPath(entry.path, data: writeData, label: entry.label)
+                bad_query_release(handle)
+                if ok { return true }
+            }
+        }
+
+        // Strategy 2: try via container classes
+        for entry in ffPaths {
+            for cls: UInt64 in [10, 12, 13, 15] {
+                let handle = acquireSandboxEx(entry.path, identifier: "com.apple.preferences", containerClass: cls, label: "ff-class\(cls)")
+                if handle >= 0 {
+                    let ok = writeToPath(entry.path, data: data, label: "ff-class\(cls)")
+                    bad_query_release(handle)
+                    if ok { return true }
+                }
+            }
+        }
+
+        appendLog("[featureflags] all strategies failed")
+        return false
     }
 
     // MARK: - Check Status
@@ -281,35 +357,39 @@ struct AIEnablerView: View {
             bad_query_release(mgHandle)
         }
 
-        // Eligibility
-        let eligHandle = acquireSandbox(eligPath, label: "eligibility")
-        if eligHandle >= 0 {
-            if let data = try? Data(contentsOf: URL(fileURLWithPath: eligPath)),
-               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-               let gm = plist["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any],
-               let answer = gm["os_eligibility_answer_t"] as? Int {
-                appendLog("[eligibility] GREYMATTER = \(answer) \(answer == 4 ? "(eligible)" : "(NOT eligible)")")
-            } else {
-                appendLog("[eligibility] not found or unreadable")
+        // Eligibility — try all known paths
+        var eligFound = false
+        for entry in eligPaths {
+            let handle = acquireSandbox(entry.path, label: entry.label, create: true)
+            if handle >= 0 {
+                if let data = try? Data(contentsOf: URL(fileURLWithPath: entry.path)),
+                   let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                   let gm = plist["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any],
+                   let answer = gm["os_eligibility_answer_t"] as? Int {
+                    appendLog("[eligibility] GREYMATTER = \(answer) \(answer == 4 ? "(eligible)" : "(NOT eligible)") at \(entry.path)")
+                    eligFound = true
+                }
+                bad_query_release(handle)
+                if eligFound { break }
             }
-            bad_query_release(eligHandle)
+        }
+        if !eligFound {
+            appendLog("[eligibility] not accessible via any known path")
         }
 
         // Feature Flags
-        let ffHandle = acquireSandbox(ffPath, label: "featureflags")
-        if ffHandle >= 0 {
-            if let data = try? Data(contentsOf: URL(fileURLWithPath: ffPath)),
-               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
-                let saeOverride = ((plist["Siri"] as? [String: Any])?["sae_override"] as? [String: Any])?["Enabled"] as? Bool
-                let engineOverride = ((plist["Siri"] as? [String: Any])?["assistant_engine_override"] as? [String: Any])?["Enabled"] as? Bool
-                let siriUISae = ((plist["SiriUI"] as? [String: Any])?["sae"] as? [String: Any])?["Enabled"] as? Bool
-                appendLog("[featureflags] Siri.sae_override = \(saeOverride.map(String.init(describing:)) ?? "missing")")
-                appendLog("[featureflags] Siri.engine_override = \(engineOverride.map(String.init(describing:)) ?? "missing")")
-                appendLog("[featureflags] SiriUI.sae = \(siriUISae.map(String.init(describing:)) ?? "missing")")
-            } else {
-                appendLog("[featureflags] not found or unreadable")
+        for entry in ffPaths {
+            let handle = acquireSandbox(entry.path, label: entry.label, create: true)
+            if handle >= 0 {
+                if let data = try? Data(contentsOf: URL(fileURLWithPath: entry.path)),
+                   let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+                    let saeOverride = ((plist["Siri"] as? [String: Any])?["sae_override"] as? [String: Any])?["Enabled"] as? Bool
+                    appendLog("[featureflags] Siri.sae_override = \(saeOverride.map(String.init(describing:)) ?? "missing")")
+                } else {
+                    appendLog("[featureflags] not found or unreadable at \(entry.path)")
+                }
+                bad_query_release(handle)
             }
-            bad_query_release(ffHandle)
         }
 
         appendLog("--- done ---")

