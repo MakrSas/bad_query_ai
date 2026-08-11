@@ -125,7 +125,34 @@ Workflow: .github/workflows/build.yml
 | v4 | Eligibility diagnostics | Found GREYMATTER blocking factor (GMS=2) |
 | v5 | Eligibility write attempts | All 5 methods failed, but verified eligibility auto-updates |
 | v6 | Feature flag attack + container scanner | No set API in FeatureFlags framework; Global.plist absent; container scan empty |
-| v7 | Eligibility API attack + MG key probe | Probing os_eligibility_set_input brute-force + domain scan 0-50 |
+| v7 | Eligibility API attack + MG key probe | CRASH: wrong API signatures; MG key hashes wrong for iOS 27 |
+
+## v7 Results
+
+### MG Key Probe
+Extra MobileGestalt key hashes (sourced from internet) are WRONG for iOS 27. Returned values from different properties:
+- `AlwaysOnAssistant` hash → returned `<type18>` (wrong key, probably a dict)
+- `DeviceClassNumber` hash → returned `27.0` (OS version, not device class)
+- `HeySiriSupport` hash → returned `LL/A` (region code)
+- `NeuralEngine` hash → returned `iPhone` (device marketing name)
+- Spoofed keys (AI, ProductType, HardwareModel, CPUChip) all read back correctly
+
+### Eligibility API Crash
+Both `os_eligibility_get_domain_answer` and `os_eligibility_set_input` crash the app. The guessed signatures `(int) → int` and `(int, int, int) → int` are wrong. These functions likely take pointer/struct arguments (e.g. `xpc_object_t`, output pointers, or ObjC objects).
+
+### Remaining Blocker
+Feature flags `Siri.sae_override` and `Siri.assistant_engine_override` remain DISABLED. No known write path exists within the sandbox boundary.
+
+## Untried Approaches
+
+1. **Reverse-engineer eligibility API** — use `nm -g` on device framework binaries to get real exported symbol signatures
+2. **Configuration profile (.mobileconfig)** — may contain payload for feature flags
+3. **Geod writable prefs** — `com.apple.geod/Library/Preferences/` is writable; test if any plist there can influence Siri
+4. **Trial/experiment system** — Apple's CloudKit A/B testing; could fake a trial enrollment
+5. **XPC to eligibilityd** — direct daemon communication with correct entitlements
+6. **Find correct MG key hashes** — dump all CacheExtra keys from current plist to find real AI-related keys
+7. **NSProcessInfo environment** — some feature flags check env vars at runtime
+8. **Swizzle _os_feature_enabled_impl** — hook the check function at runtime to always return true for Siri flags
 
 ## Device
 
