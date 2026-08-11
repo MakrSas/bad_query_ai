@@ -9,6 +9,7 @@
 #define bad_query_h
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 int64_t bad_query(char* path, bool create, char *group_identifier, bool is_group);
