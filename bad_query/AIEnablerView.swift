@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v27 — identify Siri preference key"
+    @State private var log = "AI Enabler v28 — controlled Siri preference write"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -71,8 +71,16 @@ struct AIEnablerView: View {
                             inspectSiriAvailability()
                         }
 
-                        Button("Identify Siri Preference Key") {
-                            identifySiriPreferenceKey()
+                        Button("Verify Siri Preference Setter") {
+                            writeSiriPreference(operation: 0)
+                        }
+
+                        Button("Apply SAE Availability") {
+                            writeSiriPreference(operation: 1)
+                        }
+
+                        Button("Restore Siri Availability") {
+                            writeSiriPreference(operation: 2)
                         }
                     }
 
@@ -125,7 +133,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v27" }
+                            Button("Clear") { log = "AI Enabler v28" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -768,6 +776,18 @@ struct AIEnablerView: View {
         }
         appendLog("read-only; setter symbols not called")
         appendLog("=== END SIRI PREFERENCE KEY ===")
+    }
+
+    func writeSiriPreference(operation: Int32) {
+        appendLog("=== SIRI PREFERENCE WRITE op=\(operation) ===")
+        guard let cString = siri_preferences_write(operation) else {
+            appendLog("write returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI PREFERENCE WRITE ===")
     }
 
     func probeSiriGroups() {

@@ -376,6 +376,14 @@ v26 maps the exact `+[AFSiriAvailability fromPreferences]` implementation, resol
 
 v27 decodes the two static CF/Objective-C objects loaded into `x0` and `x1` before `_AFPreferencesValueForKeyWithContext`, prints their descriptions, invokes only the confirmed reader with the same arguments to show the raw dictionary, and checks likely symmetric setter symbol names with `dlsym` without calling them. This establishes the exact preference identity and whether a direct private setter exists.
 
+### v27 device result
+
+The persistent object is `SiriAvailability` in context `com.apple.assistant.backedup`. Its dictionary exactly matches the v25 preference object. Both `_AFPreferencesSetValueForKeyWithContext` and the shorter `_AFPreferencesSetValueForKey` are exported on build 24A5390f.
+
+## v28 Controlled Availability Write
+
+v28 adds three focused actions. **Verify Siri Preference Setter** writes the current dictionary unchanged and reads it back, isolating the private setter ABI before any semantic change. **Apply SAE Availability** saves a durable backup in the app preferences, changes SAE capabilities from `0x34` to `0x37`, visual capabilities from `0x1e` to `0x1f`, and changes desired/current orchestration mode from FullUOD (`2`) to SAE (`4`). **Restore Siri Availability** writes the saved dictionary back. Every operation reports complete before/after dictionaries and `readbackEqual`; Verify must be run first, and Apply must not be run if verification crashes or fails equality.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

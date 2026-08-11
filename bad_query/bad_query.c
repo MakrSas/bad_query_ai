@@ -1366,6 +1366,78 @@ char *siri_preferences_key_probe(void) {
     return out;
 }
 
+// operation: 0 = unchanged ABI test, 1 = apply SAE, 2 = restore backup.
+char *siri_preferences_write(int operation) {
+    const size_t cap = 16384;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+
+    typedef CFTypeRef (*value_fn)(CFTypeRef, CFTypeRef, CFTypeRef);
+    typedef void (*set_fn)(CFTypeRef, CFTypeRef, CFTypeRef, CFTypeRef);
+    value_fn reader = (value_fn)dlsym(assistant, "_AFPreferencesValueForKeyWithContext");
+    set_fn setter = (set_fn)dlsym(assistant, "_AFPreferencesSetValueForKeyWithContext");
+    if (!reader || !setter) {
+        snprintf(out, cap, "reader=%s setter=%s\n", reader ? "OK" : "MISSING", setter ? "OK" : "MISSING");
+        dlclose(assistant); return out;
+    }
+    CFStringRef key = CFSTR("SiriAvailability");
+    CFStringRef context = CFSTR("com.apple.assistant.backedup");
+    CFTypeRef current = reader(key, context, NULL);
+    if (!current || CFGetTypeID(current) != CFDictionaryGetTypeID()) {
+        append_cf_description(out, cap, &len, "current", current);
+        dlclose(assistant); return out;
+    }
+
+    CFTypeRef target = current;
+    CFPropertyListRef saved = NULL;
+    if (operation == 1) {
+        CFPreferencesSetAppValue(CFSTR("AIEnablerSiriAvailabilityBackup"), current, kCFPreferencesCurrentApplication);
+        Boolean synced = CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication);
+        len += snprintf(out + len, cap - len, "backup=%s\n", synced ? "SAVED" : "SYNC_FAILED");
+        CFMutableDictionaryRef patched = CFDictionaryCreateMutableCopy(NULL, 0, (CFDictionaryRef)current);
+        CFDictionaryRef old_caps = CFDictionaryGetValue((CFDictionaryRef)current, CFSTR("allCapabilities"));
+        CFMutableDictionaryRef caps = old_caps && CFGetTypeID(old_caps) == CFDictionaryGetTypeID() ? CFDictionaryCreateMutableCopy(NULL, 0, old_caps) : NULL;
+        if (!patched || !caps) {
+            if (patched) CFRelease(patched); if (caps) CFRelease(caps);
+            snprintf(out + len, cap - len, "patch=FAILED_BAD_DICTIONARY\n");
+            dlclose(assistant); return out;
+        }
+        int64_t sae = 0x37, visual = 0x1f, mode = 4;
+        CFNumberRef sae_n = CFNumberCreate(NULL, kCFNumberSInt64Type, &sae);
+        CFNumberRef visual_n = CFNumberCreate(NULL, kCFNumberSInt64Type, &visual);
+        CFNumberRef mode_n = CFNumberCreate(NULL, kCFNumberSInt64Type, &mode);
+        CFDictionarySetValue(caps, CFSTR("saeCapabilities"), sae_n);
+        CFDictionarySetValue(caps, CFSTR("visualIntelligenceCapabilities"), visual_n);
+        CFDictionarySetValue(patched, CFSTR("allCapabilities"), caps);
+        CFDictionarySetValue(patched, CFSTR("desiredOrchestrationMode"), mode_n);
+        CFDictionarySetValue(patched, CFSTR("desiredOrchestrationModeIfEnabled"), mode_n);
+        CFDictionarySetValue(patched, CFSTR("currentOrchestrationMode"), mode_n);
+        CFRelease(sae_n); CFRelease(visual_n); CFRelease(mode_n); CFRelease(caps);
+        target = patched;
+    } else if (operation == 2) {
+        saved = CFPreferencesCopyAppValue(CFSTR("AIEnablerSiriAvailabilityBackup"), kCFPreferencesCurrentApplication);
+        if (!saved || CFGetTypeID(saved) != CFDictionaryGetTypeID()) {
+            snprintf(out, cap, "backup=NOT_FOUND\n"); if (saved) CFRelease(saved);
+            dlclose(assistant); return out;
+        }
+        target = saved;
+    }
+    append_cf_description(out, cap, &len, "before", current);
+    // Cocoa private setters conventionally receive value before key. The
+    // trailing zero is harmless if this exact build consumes only 3 args.
+    setter(target, key, context, NULL);
+    CFTypeRef after = reader(key, context, NULL);
+    append_cf_description(out, cap, &len, "after", after);
+    len += snprintf(out + len, cap - len, "readbackEqual=%d operation=%d\n", after && CFEqual(target, after), operation);
+    if (operation == 1 && target != current) CFRelease(target);
+    if (saved) CFRelease(saved);
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

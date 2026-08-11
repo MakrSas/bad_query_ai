@@ -42,6 +42,7 @@ char *siri_availability_runtime_map(void);
 char *siri_availability_detail_probe(void);
 char *siri_preferences_source_map(void);
 char *siri_preferences_key_probe(void);
+char *siri_preferences_write(int operation);
 
 // Eligibility private API
 char *elig_probe_domains(void);
