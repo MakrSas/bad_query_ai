@@ -16,7 +16,6 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <signal.h>
-#include <sandbox.h>
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
@@ -2002,17 +2001,21 @@ char *siri_daemon_exec_capability_probe(void) {
     const size_t cap = 4096;
     char *out = calloc(1, cap); if (!out) return NULL;
     size_t len = 0;
+    typedef int (*sandbox_check_fn)(pid_t, const char *, uint64_t, ...);
+    void *sandbox_lib = dlopen("/usr/lib/libsandbox.1.dylib", RTLD_NOW | RTLD_LOCAL);
+    sandbox_check_fn check = sandbox_lib ? (sandbox_check_fn)dlsym(sandbox_lib, "sandbox_check") : NULL;
     const char *tools[] = { "/usr/bin/killall", "/bin/launchctl", "/usr/bin/launchctl", NULL };
     for (int i = 0; tools[i]; i++) {
         errno = 0;
         int exists = access(tools[i], X_OK);
         int access_errno = errno;
-        int policy = sandbox_check(getpid(), "process-exec", SANDBOX_FILTER_PATH, tools[i]);
+        int policy = check ? check(getpid(), "process-exec", 1, tools[i]) : -1;
         len += snprintf(out + len, cap - len, "%s executable=%d accessErrno=%d sandboxProcessExec=%s\n", tools[i], exists == 0, access_errno, policy == 0 ? "ALLOW" : "DENY");
     }
-    int signal_policy = sandbox_check(getpid(), "signal", 0);
+    int signal_policy = check ? check(getpid(), "signal", 0) : -1;
     len += snprintf(out + len, cap - len, "sandboxSignalOperation=%s\n", signal_policy == 0 ? "ALLOW" : "DENY");
     len += snprintf(out + len, cap - len, "read-only; no tools launched and no signals sent\n");
+    if (sandbox_lib) dlclose(sandbox_lib);
     return out;
 }
 
