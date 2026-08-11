@@ -221,6 +221,10 @@ Build `24A5390f` entitlement diffs identify new and existing Siri application gr
 
 The probe uses `container_copy_path(container, errorOut)` to report the resolved container root and does not alter files. A returned `PATH:` result would establish a new candidate surface for subsequent targeted preference/trial-state inspection; `NO_RESULT` across all groups rules out this class-7 route under the current iLoader-signed identity.
 
+- Commit: `8c53da0` (`v11: make Siri gate probe safe and discover app groups`)
+- GitHub Actions run: [31523101781](https://github.com/MakrSas/bad_query_ai/actions/runs/31523101781)
+- Result: successful unsigned iPhoneOS build and IPA/TIPA artifact upload.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
