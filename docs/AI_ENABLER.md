@@ -134,6 +134,7 @@ Workflow: .github/workflows/build.yml
 | v13 | Isolated Siri predicates | Separately invokes two no-argument gates whose calling convention is supported by recovered callsites |
 | v14 | Composite Siri gate split | Isolates combined SAE, Siri-UOD, GMS hardware, and full UOD asset status predicates |
 | v15 | SAE locale diagnosis + UI cleanup | Removes obsolete/unsafe buttons and adds one consolidated current-gate report |
+| v16 | Exact-build SAE code dump | Reads the first 256 bytes of two exported gates for 24A5390f call-graph recovery |
 
 ## v7 Results
 
@@ -267,6 +268,14 @@ v14 added isolated calls for `AFDeviceSupportsSAE`, `AFDeviceSupportsSiriUOD`, `
 ## v15 Locale Gate and UI Cleanup
 
 VoiceTriggerUI diagnostics explicitly reference `AFLocaleSupportsSAE()` with no arguments, confirming its calling convention. v15 replaces the unsafe UOD-assets slot with this locale predicate and reports `Locale.current`, preferred languages, and region alongside all previously safe gate results. The UI now keeps only the full identity spoof, eligibility/full status, consolidated current Siri gates, research dumps, safe asset probe, respring, and revert; obsolete partial spoof and completed one-off gate buttons are removed.
+
+### v15 device result
+
+The device reports `en_US`, preferred language `en-US`, region `US`, and `AFLocaleSupportsSAE()=true`. Every isolated known sub-gate is now true: capability-plus-FeatureFlags, Siri UOD, unembargoed GMS hardware, and locale. Nevertheless, both `AFDeviceSupportsSAE()` and `AFDeviceSupportsSystemAssistantExperience()` remain false. The iOS 27 implementation therefore contains at least one additional condition not represented by the recovered iOS 26.1 call graph.
+
+## v16 Exact-Build Code Recovery
+
+v16 adds **Dump SAE Gate Code (Safe)**. It resolves but does not invoke `AFDeviceSupportsSAE` and `AFDeviceSupportsSystemAssistantExperience`, strips arm64e function-pointer authentication when required, reports image-relative addresses, and copies the first 256 executable bytes as hex. The dump is intended for offline ARM64 disassembly to identify exact 24A5390f branch targets and the unknown additional predicate without another guessed private call.
 
 ## Device
 

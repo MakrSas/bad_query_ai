@@ -16,6 +16,9 @@
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
+#if __has_include(<ptrauth.h>)
+#include <ptrauth.h>
+#endif
 
 #include <sys/mount.h>
 #include <sys/fsgetpath.h>
@@ -561,6 +564,62 @@ int siri_gate_call_confirmed(int gate_index) {
     int result = fn() ? 1 : 0;
     dlclose(assistant);
     return result;
+}
+
+char *siri_gate_code_dump(void) {
+    const char *symbols[] = {
+        "AFDeviceSupportsSAE",
+        "AFDeviceSupportsSystemAssistantExperience",
+        NULL
+    };
+    const size_t bytes_per_symbol = 256;
+    const size_t cap = 16384;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    for (int i = 0; symbols[i]; i++) {
+        void *symbol = dlsym(assistant, symbols[i]);
+        if (!symbol) {
+            len += snprintf(out + len, cap - len, "%s=NO_SYMBOL\n", symbols[i]);
+            continue;
+        }
+
+        void *code = symbol;
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+        code = ptrauth_strip(symbol, ptrauth_key_function_pointer);
+#endif
+        Dl_info info = {0};
+        dladdr(code, &info);
+        uintptr_t address = (uintptr_t)code;
+        uintptr_t base = (uintptr_t)info.dli_fbase;
+        len += snprintf(out + len, cap - len,
+                        "[%s] image=%s address=0x%llx imageOffset=0x%llx\n",
+                        symbols[i], info.dli_fname ? info.dli_fname : "?",
+                        (unsigned long long)address,
+                        (unsigned long long)(base ? address - base : 0));
+
+        const unsigned char *p = (const unsigned char *)code;
+        for (size_t offset = 0; offset < bytes_per_symbol && len + 80 < cap; offset += 16) {
+            len += snprintf(out + len, cap - len, "%04llx:",
+                            (unsigned long long)offset);
+            for (size_t j = 0; j < 16; j++) {
+                len += snprintf(out + len, cap - len, "%02x", p[offset + j]);
+            }
+            len += snprintf(out + len, cap - len, "\n");
+        }
+    }
+
+    dlclose(assistant);
+    return out;
 }
 
 char *elig_probe_domains(void) {

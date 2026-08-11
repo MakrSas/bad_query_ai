@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v15 — SAE locale diagnosis"
+    @State private var log = "AI Enabler v16 — exact-build SAE code dump"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -61,6 +61,10 @@ struct AIEnablerView: View {
                     Section("Step 3: Current Siri Gate") {
                         Button("Probe Current Siri Gates") {
                             probeCurrentSiriGates()
+                        }
+
+                        Button("Dump SAE Gate Code (Safe)") {
+                            dumpSiriGateCode()
                         }
                     }
 
@@ -113,7 +117,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v15" }
+                            Button("Clear") { log = "AI Enabler v16" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -576,6 +580,21 @@ struct AIEnablerView: View {
             appendLog("\(name)=\(result == 1 ? "TRUE" : result == 0 ? "false" : "err(\(result))")")
         }
         appendLog("=== END CURRENT SIRI GATES ===")
+    }
+
+    func dumpSiriGateCode() {
+        appendLog("=== EXACT-BUILD SAE CODE ===")
+        guard let cString = siri_gate_code_dump() else {
+            appendLog("dump returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only memory snapshot; no gates invoked")
+        appendLog("=== END EXACT-BUILD SAE CODE ===")
     }
 
     func probeSiriGroups() {
