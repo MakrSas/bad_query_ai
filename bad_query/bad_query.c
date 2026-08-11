@@ -908,6 +908,66 @@ char *siri_refresh_method_dump(void) {
     return out;
 }
 
+char *siri_refresh_call_map(void) {
+    const size_t cap = 32768;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    Class cls = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    Method method = cls ? class_getInstanceMethod(
+        cls, sel_registerName("fetchGenerativeModelsAvailability")) : NULL;
+    if (!method) {
+        snprintf(out, cap, "method=NOT_FOUND\n");
+        dlclose(assistant);
+        return out;
+    }
+    void *code = (void *)method_getImplementation(method);
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+    code = ptrauth_strip(code, ptrauth_key_function_pointer);
+#endif
+    uintptr_t start = (uintptr_t)code;
+    const uint32_t *ins = (const uint32_t *)code;
+    len += snprintf(out + len, cap - len, "refreshIMP=0x%llx\n",
+                    (unsigned long long)start);
+
+    for (size_t n = 0; n < 268 && len + 256 < cap; n++) { // through method return
+        uint32_t instruction = ins[n];
+        if ((instruction & 0xFC000000U) != 0x94000000U) continue; // BL imm26
+        int64_t immediate = (int64_t)(instruction & 0x03FFFFFFU);
+        if (immediate & 0x02000000LL) immediate |= ~0x03FFFFFFLL;
+        uintptr_t source = start + n * 4;
+        uintptr_t target = (uintptr_t)((int64_t)source + (immediate << 2));
+        Dl_info info = {0};
+        dladdr((void *)target, &info);
+
+        const char *selector_name = NULL;
+        const uint32_t *stub = (const uint32_t *)target;
+        // objc_msgSend stubs begin ADRP x1; ADD x1, x1, #imm; B dispatcher.
+        if ((stub[0] & 0x9F00001FU) == 0x90000001U &&
+            (stub[1] & 0xFFC003FFU) == 0x91000021U) {
+            uintptr_t selector_page = decode_adrp_target(target, stub[0]);
+            uint64_t add_imm = (stub[1] >> 10) & 0xFFF;
+            if ((stub[1] >> 22) & 1) add_imm <<= 12;
+            selector_name = (const char *)(selector_page + add_imm);
+        }
+        len += snprintf(out + len, cap - len,
+                        "+0x%04llx target=0x%llx selector=%s nearest=%s\n",
+                        (unsigned long long)(n * 4),
+                        (unsigned long long)target,
+                        selector_name ? selector_name : "-",
+                        info.dli_sname ? info.dli_sname : "-");
+    }
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

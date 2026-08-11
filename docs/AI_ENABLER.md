@@ -140,6 +140,7 @@ Workflow: .github/workflows/build.yml
 | v19 | Deprecated SAE dependency recovery | Decomposes the cached device-support source into its three internal predicates |
 | v20 | Refresh stale SAE cache | Calls the known cache refresh method and posts its three observed Darwin notifications |
 | v21 | Exact SAE refresh IMP dump | Captures the iOS 27 manager refresh implementation for offline disassembly |
+| v22 | SAE refresh call map | Resolves every direct call and Objective-C selector used by the iOS 27 refresh IMP |
 
 ## v7 Results
 
@@ -321,6 +322,14 @@ The method was present and called, and all three `notify_post` operations return
 ## v21 Exact Refresh Implementation
 
 v21 resolves the Objective-C instance method at runtime with `class_getInstanceMethod`, strips arm64e authentication from its IMP, reports its exact image-relative address and type encoding, and copies 1536 bytes for offline ARM64 disassembly. This is read-only and does not invoke the IMP. The goal is to recover the exact values written by 24A5390f rather than continue from the older implementation.
+
+### v21 analysis
+
+The captured IMP confirms a structural change in iOS 27. It first obtains a generative-models availability object, reads status enums and two packed bit fields, compares them with six cached manager properties, and then calls six setters. The cached device-support value is derived from one packed field equaling `0x27`, not directly from `AFDeviceSupportsSAEDeprecated`. This explains why the deprecated gate is true while the refreshed cache remains false.
+
+## v22 Refresh Call Map
+
+v22 scans the exact IMP through its return instruction, decodes every direct `BL`, recognizes stripped Objective-C message-send stubs, and reconstructs their selector strings. It reports a compact offset-to-selector/symbol map and removes the obsolete 1536-byte dump action from the UI. This should identify the availability provider, field getters, and the setter receiving the failing bitmask.
 
 ## Device
 

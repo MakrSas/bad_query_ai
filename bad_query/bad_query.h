@@ -36,6 +36,7 @@ char *siri_gate_selector_probe(void);
 char *siri_deprecated_dependency_probe(void);
 char *siri_refresh_sae_cache(void);
 char *siri_refresh_method_dump(void);
+char *siri_refresh_call_map(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);
