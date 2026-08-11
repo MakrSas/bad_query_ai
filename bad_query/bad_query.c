@@ -1556,6 +1556,51 @@ char *siri_capabilities_service_sync_probe(void) {
     return out;
 }
 
+char *siri_capabilities_client_call_map(void) {
+    const size_t cap = 32768;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+    const char *classes[] = { "AFSiriCapabilitiesServiceClient", "SOSiriCapabilitiesServiceClient", NULL };
+    const char *selectors[] = { "updateCapabilities:", "requestSiriAvailabilityWithCompletion:", NULL };
+    for (int m = 0; classes[m] && len + 2048 < cap; m++) {
+        Class cls = objc_getClass(classes[m]);
+        Method method = cls ? class_getInstanceMethod(cls, sel_registerName(selectors[m])) : NULL;
+        if (!method) { len += snprintf(out + len, cap - len, "[%s %s] NOT_FOUND\n", classes[m], selectors[m]); continue; }
+        void *code = (void *)method_getImplementation(method);
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+        code = ptrauth_strip(code, ptrauth_key_function_pointer);
+#endif
+        uintptr_t start = (uintptr_t)code;
+        const uint32_t *ins = (const uint32_t *)code;
+        len += snprintf(out + len, cap - len, "[%s %s] IMP=0x%llx types=%s\n", classes[m], selectors[m], (unsigned long long)start, method_getTypeEncoding(method));
+        for (size_t n = 0; n < 160 && len + 512 < cap; n++) {
+            uint32_t instruction = ins[n];
+            if ((instruction & 0xFC000000U) == 0x94000000U) {
+                int64_t immediate = (int64_t)(instruction & 0x03FFFFFFU);
+                if (immediate & 0x02000000LL) immediate |= ~0x03FFFFFFLL;
+                uintptr_t source = start + n * 4;
+                uintptr_t target = (uintptr_t)((int64_t)source + (immediate << 2));
+                Dl_info info = {0}; dladdr((void *)target, &info);
+                const char *selector_name = NULL;
+                const uint32_t *stub = (const uint32_t *)target;
+                if ((stub[0] & 0x9F00001FU) == 0x90000001U && (stub[1] & 0xFFC003FFU) == 0x91000021U) {
+                    uintptr_t page = decode_adrp_target(target, stub[0]);
+                    uint64_t add = (stub[1] >> 10) & 0xFFF; if ((stub[1] >> 22) & 1) add <<= 12;
+                    selector_name = (const char *)(page + add);
+                }
+                len += snprintf(out + len, cap - len, "+0x%04llx selector=%s nearest=%s\n", (unsigned long long)(n * 4), selector_name ? selector_name : "-", info.dli_sname ? info.dli_sname : "-");
+            }
+            if (instruction == 0xD65F03C0U) break;
+        }
+    }
+    len += snprintf(out + len, cap - len, "read-only; methods not invoked\n");
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

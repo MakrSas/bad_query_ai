@@ -424,6 +424,14 @@ Both service clients are simple `NSObject` subclasses with one retained `NSXPCCo
 
 v31 instantiates `AFSiriCapabilitiesServiceClient` with inherited `init` and invokes its three exact-ABI synchronous boolean getters. It reports SAE enablement, whether SAE assets should download, App Intents enablement, and the XPC connection object before and after. The probe performs no update or preference mutation.
 
+### v31 device result
+
+The client connected successfully to `com.apple.siri.orchestration.capabilities`, but the service returned false for SAE, asset-download eligibility, and App Intents. This proves the remaining mismatch is across the capability-service boundary: the app-local status manager can be made fully SAE-capable while SpringBoard's service remains in the classic state.
+
+## v32 Capability Client Call Map
+
+v32 decodes the direct calls and Objective-C selector stubs in `-[AFSiriCapabilitiesServiceClient updateCapabilities:]` and `-[SOSiriCapabilitiesServiceClient requestSiriAvailabilityWithCompletion:]`. It does not invoke either method. The output identifies the remote selector and completion plumbing needed for a correctly typed service refresh/request.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

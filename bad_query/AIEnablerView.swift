@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v31 — query Siri capability service"
+    @State private var log = "AI Enabler v32 — map capability service calls"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Query Siri Capability Service") {
-                            querySiriCapabilityService()
+                        Button("Map Siri Capability Service Calls") {
+                            mapSiriCapabilityServiceCalls()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v31" }
+                            Button("Clear") { log = "AI Enabler v32" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -814,6 +814,18 @@ struct AIEnablerView: View {
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("read-only synchronous service query")
         appendLog("=== END SIRI CAPABILITY SERVICE SYNC ===")
+    }
+
+    func mapSiriCapabilityServiceCalls() {
+        appendLog("=== SIRI CAPABILITY CLIENT CALL MAP ===")
+        guard let cString = siri_capabilities_client_call_map() else {
+            appendLog("call map returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI CAPABILITY CLIENT CALL MAP ===")
     }
 
     func probeSiriGroups() {
