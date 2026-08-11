@@ -1,0 +1,67 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: List available Xcode versions
+        run: ls /Applications/ | grep Xcode
+
+      - name: Select latest Xcode
+        run: |
+          # Pick the highest Xcode version available
+          LATEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$LATEST" ]; then
+            echo "No Xcode found!"
+            exit 1
+          fi
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST"
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos
+
+      - name: Build unsigned app
+        run: |
+          xcodebuild clean build \
+            -project bad_query.xcodeproj \
+            -scheme bad_query \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            ONLY_ACTIVE_ARCH=NO
+
+      - name: Package IPA
+        run: |
+          APP_PATH=$(find build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app found in build output"
+            find build -type d -name "*.app" || true
+            exit 1
+          fi
+          echo "Found app at: $APP_PATH"
+
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r bad_query_ai.ipa Payload/
+          cp bad_query_ai.ipa bad_query_ai.tipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: bad_query_ai
+          path: |
+            bad_query_ai.ipa
+            bad_query_ai.tipa

@@ -11,7 +11,16 @@ import SwiftUI
 struct bad_queryApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabView {
+                ContentView()
+                    .tabItem {
+                        Label("Sandbox", systemImage: "lock.open")
+                    }
+                AIEnablerView()
+                    .tabItem {
+                        Label("AI Enabler", systemImage: "brain")
+                    }
+            }
         }
     }
 }
