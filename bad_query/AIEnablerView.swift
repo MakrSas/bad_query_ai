@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v26 — map Siri preference source"
+    @State private var log = "AI Enabler v27 — identify Siri preference key"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -71,8 +71,8 @@ struct AIEnablerView: View {
                             inspectSiriAvailability()
                         }
 
-                        Button("Map Siri Preference Source (Safe)") {
-                            mapSiriPreferenceSource()
+                        Button("Identify Siri Preference Key") {
+                            identifySiriPreferenceKey()
                         }
                     }
 
@@ -125,7 +125,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v26" }
+                            Button("Clear") { log = "AI Enabler v27" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -753,6 +753,21 @@ struct AIEnablerView: View {
         }
         appendLog("read-only; preferences unchanged")
         appendLog("=== END SIRI PREFERENCE SOURCE ===")
+    }
+
+    func identifySiriPreferenceKey() {
+        appendLog("=== SIRI PREFERENCE KEY ===")
+        guard let cString = siri_preferences_key_probe() else {
+            appendLog("probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only; setter symbols not called")
+        appendLog("=== END SIRI PREFERENCE KEY ===")
     }
 
     func probeSiriGroups() {

@@ -145,6 +145,7 @@ Workflow: .github/workflows/build.yml
 | v24 | Siri availability runtime map | Enumerates the new availability object's methods, properties, and ivars |
 | v25 | Availability source details | Compares live and preference-backed objects, reasons, modes, and missing capabilities |
 | v26 | Siri preference source map | Recovers the preference API and storage-facing selectors behind `fromPreferences` |
+| v27 | Siri preference key recovery | Decodes key/context objects, reads the raw value, and inventories setter exports |
 
 ## v7 Results
 
@@ -366,6 +367,14 @@ Live and preference-backed objects are byte-for-field equivalent and from the cu
 ## v26 Preference Source Recovery
 
 v26 maps the exact `+[AFSiriAvailability fromPreferences]` implementation, resolves Objective-C selectors and direct symbols, and enumerates availability/orchestration/capability-related methods on `AFPreferences`-family classes. It is read-only. The goal is to identify the actual persisted key/domain and whether a supported setter exists before attempting any mutation.
+
+### v26 device result
+
+`fromPreferences` calls `_AFPreferencesValueForKeyWithContext(key, context, 0)` and passes the returned dictionary to `+[AFSiriAvailability fromDictionary:]`. No availability setter is exposed by `AFPreferences`; `setCompanionDesiredOrchestrationMode:` is a separate companion-device preference and is not the capability dictionary.
+
+## v27 Key, Context, and Setter Inventory
+
+v27 decodes the two static CF/Objective-C objects loaded into `x0` and `x1` before `_AFPreferencesValueForKeyWithContext`, prints their descriptions, invokes only the confirmed reader with the same arguments to show the raw dictionary, and checks likely symmetric setter symbol names with `dlsym` without calling them. This establishes the exact preference identity and whether a direct private setter exists.
 
 ## Device
 

@@ -1303,6 +1303,69 @@ char *siri_preferences_source_map(void) {
     return out;
 }
 
+char *siri_preferences_key_probe(void) {
+    const size_t cap = 16384;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    Class cls = objc_getClass("AFSiriAvailability");
+    Method method = cls ? class_getClassMethod(cls, sel_registerName("fromPreferences")) : NULL;
+    if (!method) {
+        snprintf(out, cap, "fromPreferences=NOT_FOUND\n");
+        dlclose(assistant);
+        return out;
+    }
+    void *code = (void *)method_getImplementation(method);
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+    code = ptrauth_strip(code, ptrauth_key_function_pointer);
+#endif
+    uintptr_t start = (uintptr_t)code;
+    const uint32_t *ins = (const uint32_t *)code;
+    uintptr_t key_page = decode_adrp_target(start + 0x18, ins[6]);
+    uint64_t key_imm = (ins[7] >> 10) & 0xFFF;
+    if ((ins[7] >> 22) & 1) key_imm <<= 12;
+    CFTypeRef key = (CFTypeRef)(key_page + key_imm);
+    uintptr_t context_page = decode_adrp_target(start + 0x20, ins[8]);
+    uint64_t context_imm = (ins[9] >> 10) & 0xFFF;
+    if ((ins[9] >> 22) & 1) context_imm <<= 12;
+    CFTypeRef context = (CFTypeRef)(context_page + context_imm);
+    append_cf_description(out, cap, &len, "key", key);
+    append_cf_description(out, cap, &len, "context", context);
+
+    typedef CFTypeRef (*value_fn)(CFTypeRef, CFTypeRef, CFTypeRef);
+    value_fn read_value = (value_fn)dlsym(assistant, "_AFPreferencesValueForKeyWithContext");
+    if (!read_value) read_value = (value_fn)dlsym(assistant, "AFPreferencesValueForKeyWithContext");
+    if (read_value) {
+        CFTypeRef value = read_value(key, context, NULL);
+        append_cf_description(out, cap, &len, "currentValue", value);
+    } else {
+        len += snprintf(out + len, cap - len, "reader=NO_SYMBOL\n");
+    }
+
+    const char *setters[] = {
+        "_AFPreferencesSetValueForKeyWithContext",
+        "AFPreferencesSetValueForKeyWithContext",
+        "_AFPreferencesSetValueForKey",
+        "AFPreferencesSetValueForKey",
+        "_AFPreferencesSetValue",
+        "AFPreferencesSetValue",
+        NULL
+    };
+    for (int i = 0; setters[i]; i++) {
+        len += snprintf(out + len, cap - len, "%s=%s\n", setters[i],
+                        dlsym(assistant, setters[i]) ? "PRESENT_NOT_CALLED" : "NO_SYMBOL");
+    }
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.
