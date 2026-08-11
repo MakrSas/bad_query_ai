@@ -142,6 +142,7 @@ Workflow: .github/workflows/build.yml
 | v21 | Exact SAE refresh IMP dump | Captures the iOS 27 manager refresh implementation for offline disassembly |
 | v22 | SAE refresh call map | Resolves every direct call and Objective-C selector used by the iOS 27 refresh IMP |
 | v23 | Siri availability inspection | Reads the live capability structure and names its missing SAE bits |
+| v24 | Siri availability runtime map | Enumerates the new availability object's methods, properties, and ivars |
 
 ## v7 Results
 
@@ -339,6 +340,14 @@ The refresh obtains `fetchSiriAvailability`, reads `allCapabilities`, `desiredOr
 ## v23 Live Availability Structure
 
 v23 invokes the now-identified safe getters, captures the five-word `allCapabilities` structure using the arm64 large-structure return convention, reports orchestration mode and availability, and uses exported `NSStringFromAFSiriSystemAssistantExperienceCapabilities` / `NSStringFromAFSiriVisualIntelligenceCapabilities` formatters to name present and missing bits. The completed call-map action is removed from the UI.
+
+### v23 device result
+
+The live system-assistant word is `0x34`; required mask `0x27` is missing `0x3`. Apple's formatter names those missing bits `DeviceCapable` and `GrayMatterFeatureFlagEnabled`. Language support, GMS availability, and the user setting are present. Visual intelligence is `0x1e` of required `0x1f`, independently missing only `DeviceCapable`. Desired orchestration mode is `2`, while availability itself reports true.
+
+## v24 Availability Runtime Metadata
+
+v24 enumerates all methods, class methods, properties, and ivars of the exact-build `AFSiriAvailability` object, including Objective-C type encodings and ivar offsets. This determines whether the two missing bits have direct getters/setters or whether their source must be recovered from the manager's `fetchSiriAvailability` implementation. The action is read-only.
 
 ## Device
 

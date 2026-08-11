@@ -1068,6 +1068,73 @@ char *siri_availability_probe(void) {
     return out;
 }
 
+char *siri_availability_runtime_map(void) {
+    const size_t cap = 32768;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    Class manager_class = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    id manager = manager_class ? ((id (*)(id, SEL))objc_msgSend)(
+        (id)manager_class, sel_registerName("sharedManager")) : nil;
+    id availability = manager ? ((id (*)(id, SEL))objc_msgSend)(
+        manager, sel_registerName("fetchSiriAvailability")) : nil;
+    Class cls = availability ? object_getClass(availability) : objc_getClass("AFSiriAvailability");
+    if (!cls) {
+        snprintf(out, cap, "AFSiriAvailability=NOT_FOUND\n");
+        dlclose(assistant);
+        return out;
+    }
+    len += snprintf(out + len, cap - len, "class=%s instanceSize=%zu\n",
+                    class_getName(cls), class_getInstanceSize(cls));
+
+    unsigned int count = 0;
+    Method *methods = class_copyMethodList(cls, &count);
+    len += snprintf(out + len, cap - len, "[instance methods] count=%u\n", count);
+    for (unsigned int i = 0; i < count && len + 256 < cap; i++) {
+        len += snprintf(out + len, cap - len, "%s types=%s\n",
+                        sel_getName(method_getName(methods[i])),
+                        method_getTypeEncoding(methods[i]));
+    }
+    free(methods);
+
+    Class meta = object_getClass(cls);
+    methods = class_copyMethodList(meta, &count);
+    len += snprintf(out + len, cap - len, "[class methods] count=%u\n", count);
+    for (unsigned int i = 0; i < count && len + 256 < cap; i++) {
+        len += snprintf(out + len, cap - len, "%s types=%s\n",
+                        sel_getName(method_getName(methods[i])),
+                        method_getTypeEncoding(methods[i]));
+    }
+    free(methods);
+
+    objc_property_t *properties = class_copyPropertyList(cls, &count);
+    len += snprintf(out + len, cap - len, "[properties] count=%u\n", count);
+    for (unsigned int i = 0; i < count && len + 256 < cap; i++) {
+        len += snprintf(out + len, cap - len, "%s attrs=%s\n",
+                        property_getName(properties[i]),
+                        property_getAttributes(properties[i]));
+    }
+    free(properties);
+
+    Ivar *ivars = class_copyIvarList(cls, &count);
+    len += snprintf(out + len, cap - len, "[ivars] count=%u\n", count);
+    for (unsigned int i = 0; i < count && len + 256 < cap; i++) {
+        len += snprintf(out + len, cap - len, "%s type=%s offset=%td\n",
+                        ivar_getName(ivars[i]), ivar_getTypeEncoding(ivars[i]),
+                        ivar_getOffset(ivars[i]));
+    }
+    free(ivars);
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.
