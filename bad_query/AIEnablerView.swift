@@ -102,6 +102,10 @@ struct AIEnablerView: View {
                         Button("Probe InstallCoordination Entry (Bounded)") {
                             probeInstallCoordinationEntry()
                         }
+
+                        Button("Inspect InstallCoordination Runtime (Safe)") {
+                            inspectInstallCoordinationRuntime()
+                        }
                     }
 
                     Section("Apply") {
@@ -996,6 +1000,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END INSTALLCOORDINATION ENTRY PROBE ===")
+    }
+
+    func inspectInstallCoordinationRuntime() {
+        appendLog("=== INSTALLCOORDINATION RUNTIME ===")
+        guard let cString = installcoord_runtime_inventory() else {
+            appendLog("InstallCoordination runtime inventory returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END INSTALLCOORDINATION RUNTIME ===")
     }
 
     func probeSiriGroups() {

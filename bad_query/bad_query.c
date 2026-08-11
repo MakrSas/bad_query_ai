@@ -2282,6 +2282,109 @@ char *installcoord_entry_probe(void) {
     return out;
 }
 
+// v47 never creates persisted InstallCoordination state. It only inventories
+// Objective-C metadata compiled into the installed framework and selected
+// strings from that framework, so a future graph builder can be based on this
+// exact OS build rather than the intentionally incomplete public PoC.
+static bool installcoord_interesting_class(const char *name) {
+    if (!name) return false;
+    return strstr(name, "IXS") || strstr(name, "Promise") ||
+           strstr(name, "Placeholder") || strstr(name, "Coordinator") ||
+           strstr(name, "InstallCoordination");
+}
+
+static bool installcoord_interesting_string(const char *value) {
+    return value && (strstr(value, "Promise") || strstr(value, "Placeholder") ||
+                     strstr(value, "Coordinator") || strstr(value, "Staging") ||
+                     strstr(value, "InfoPlist") || strstr(value, "localization") ||
+                     strstr(value, "materializ"));
+}
+
+static void append_installcoord_class_metadata(Class cls, char *out, size_t cap, size_t *len) {
+    unsigned int count = 0;
+    Class superclass = class_getSuperclass(cls);
+    *len += snprintf(out + *len, cap - *len, "[%s] superclass=%s instanceSize=%zu\n",
+                     class_getName(cls), superclass ? class_getName(superclass) : "-",
+                     class_getInstanceSize(cls));
+    Method *methods = class_copyMethodList(cls, &count);
+    for (unsigned int i = 0; methods && i < count && *len + 256 < cap; i++)
+        *len += snprintf(out + *len, cap - *len, "- %s types=%s\n",
+                         sel_getName(method_getName(methods[i])), method_getTypeEncoding(methods[i]));
+    free(methods);
+    Class meta = object_getClass((id)cls);
+    methods = class_copyMethodList(meta, &count);
+    for (unsigned int i = 0; methods && i < count && *len + 256 < cap; i++)
+        *len += snprintf(out + *len, cap - *len, "+ %s types=%s\n",
+                         sel_getName(method_getName(methods[i])), method_getTypeEncoding(methods[i]));
+    free(methods);
+    objc_property_t *properties = class_copyPropertyList(cls, &count);
+    for (unsigned int i = 0; properties && i < count && *len + 256 < cap; i++)
+        *len += snprintf(out + *len, cap - *len, "property %s attrs=%s\n",
+                         property_getName(properties[i]), property_getAttributes(properties[i]));
+    free(properties);
+    Ivar *ivars = class_copyIvarList(cls, &count);
+    for (unsigned int i = 0; ivars && i < count && *len + 256 < cap; i++)
+        *len += snprintf(out + *len, cap - *len, "ivar %s type=%s offset=%td\n",
+                         ivar_getName(ivars[i]), ivar_getTypeEncoding(ivars[i]), ivar_getOffset(ivars[i]));
+    free(ivars);
+}
+
+char *installcoord_runtime_inventory(void) {
+    const size_t cap = 131072;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    const char *framework = "/System/Library/PrivateFrameworks/InstallCoordination.framework/InstallCoordination";
+    void *handle = dlopen(framework, RTLD_NOW | RTLD_LOCAL);
+    if (!handle) {
+        snprintf(out, cap, "InstallCoordination=NOT_LOADED\n");
+        return out;
+    }
+    unsigned int count = 0;
+    const char **names = objc_copyClassNamesForImage(framework, &count);
+    len += snprintf(out + len, cap - len, "framework=%s classes=%u\n", framework, count);
+    unsigned int reported = 0;
+    for (unsigned int i = 0; names && i < count && len + 4096 < cap; i++) {
+        if (!installcoord_interesting_class(names[i])) continue;
+        Class cls = objc_getClass(names[i]);
+        if (!cls) continue;
+        append_installcoord_class_metadata(cls, out, cap, &len);
+        reported++;
+    }
+    free(names);
+    FILE *file = fopen(framework, "rb");
+    if (!file) {
+        len += snprintf(out + len, cap - len, "frameworkStrings=OPEN_DENIED errno=%d\n", errno);
+    } else {
+        char value[2048] = {0};
+        size_t value_length = 0;
+        int byte = 0;
+        unsigned int strings = 0;
+        while ((byte = fgetc(file)) != EOF && len + 4096 < cap) {
+            if (byte >= 0x20 && byte <= 0x7e) {
+                if (value_length + 1 < sizeof(value)) value[value_length++] = (char)byte;
+            } else {
+                if (value_length >= 5) {
+                    value[value_length] = 0;
+                    if (installcoord_interesting_string(value)) {
+                        len += snprintf(out + len, cap - len, "string %s\n", value);
+                        strings++;
+                    }
+                }
+                value_length = 0;
+            }
+        }
+        fclose(file);
+        len += snprintf(out + len, cap - len, "interestingStrings=%u\n", strings);
+    }
+    len += snprintf(out + len, cap - len,
+                    "reportedClasses=%u\n"
+                    "read-only runtime and framework metadata; no persisted state was changed\n",
+                    reported);
+    dlclose(handle);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

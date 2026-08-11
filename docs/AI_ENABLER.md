@@ -149,6 +149,7 @@ Workflow: .github/workflows/build.yml
 | v44 | Siri lifecycle-surface map | Read-only inventory of AssistantServices selectors potentially reached by a system Settings action; no daemon, XPC, or preference operation is invoked |
 | v45 | Siri Settings lifecycle chain | Read-only call map for exact Siri enablement/language setters and their notification handlers; no selector is invoked |
 | v46 | InstallCoordination entry probe | Creates, reads, and removes unique markers in the three daemon-state directories; never stages a graph, symlink, or target plist |
+| v47 | InstallCoordination runtime inventory | Read-only metadata/strings inventory for exact-build promise and coordinator classes; no graph or persisted state is created |
 
 ## v7 Results
 
@@ -565,6 +566,16 @@ This proves a normal Settings action reaches a system-owned capability recomputa
 The language route is also not a capability refresh: `setLanguageCode:` writes contextual preferences and synchronizes; `synchronizeVoiceServicesLanguageCode` selects an output voice and conditionally queries `AFDeviceSupportsSystemAssistantExperience`. Its external handler synchronizes backed-up preferences and posts local Foundation notifications. A Siri language change is therefore not a distinct route to restart or reconfigure `assistantd` and should not be repeated as an enablement experiment.
 
 The remaining useful read-only task is to recover the static preference key/context arguments at each `_AFPreferencesSetValueForKeyWithContext` call, then establish whether the daemon's capability writer subscribes to one of those backed-up preference domains or instead uses an independent identity source.
+
+## v46 InstallCoordination Entry Probe
+
+v46 implements only the reversible entry proof from the public InstallCoordination PoC. It requests the three state-directory extensions using the exact class-13/group/partDomain request, then creates, reads, deletes, and verifies a fresh random marker in each directory before releasing each extension. It never copies a state graph, creates a symlink, or interacts with a daemon reload.
+
+### v46 device result
+
+All three state directories returned working paths and completed `created=1`, `readback=1`, `removed=1`, `absentAfter=1`; the aggregate result was `success=1`. This confirms the iOS 27 beta device has the full entry primitive. It does **not** prove the second-stage graph materialization or a write to an arbitrary system path.
+
+The public PoC's own history states that its full runtime proof needed an exact-build, target-specific seed builder and a host-controlled `installcoordinationd` reload; those components are deliberately not published. The first full-chain proof targeted a disposable scratch file in the same system group, not a root-owned preference or MobileGestalt source. v47 therefore starts with exact-build framework metadata only; no graph staging is justified before its schema and a recoverable daemon-reload plan are established.
 
 ## Reassessment of Related bad_query PoCs
 

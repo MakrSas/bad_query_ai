@@ -60,6 +60,7 @@ char *siri_daemon_exec_capability_probe(void);
 char *siri_lifecycle_surface_map(void);
 char *siri_settings_lifecycle_call_map(void);
 char *installcoord_entry_probe(void);
+char *installcoord_runtime_inventory(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);
