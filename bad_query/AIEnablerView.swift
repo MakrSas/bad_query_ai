@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v12 — Siri asset diagnostics"
+    @State private var log = "AI Enabler v13 — isolated Siri gates"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -76,6 +76,14 @@ struct AIEnablerView: View {
 
                         Button("Probe Siri Gate Symbols (Safe)") {
                             probeSiriGate()
+                        }
+
+                        Button("Call System Assistant Gate") {
+                            callConfirmedSiriGate(0, name: "SystemAssistantExperience")
+                        }
+
+                        Button("Call SAE Capability+Flags Gate") {
+                            callConfirmedSiriGate(1, name: "SAEByDeviceCapabilityAndFeatureFlags")
                         }
                     }
 
@@ -132,7 +140,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v12" }
+                            Button("Clear") { log = "AI Enabler v13" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -557,6 +565,18 @@ struct AIEnablerView: View {
         }
         appendLog("unknown-ABI symbols are presence-tested only")
         appendLog("=== END SIRI GATE SYMBOLS ===")
+    }
+
+    func callConfirmedSiriGate(_ index: Int32, name: String) {
+        appendLog("=== ISOLATED SIRI GATE ===")
+        appendLog("calling \(name) only")
+        UserDefaults.standard.set(name, forKey: "LastSiriGateAttempt")
+        UserDefaults.standard.synchronize()
+        let result = siri_gate_call_confirmed(index)
+        UserDefaults.standard.set("\(name)=\(result)", forKey: "LastSiriGateAttempt")
+        UserDefaults.standard.synchronize()
+        appendLog("\(name)=\(result == 1 ? "TRUE" : result == 0 ? "false" : "err(\(result))")")
+        appendLog("=== END ISOLATED SIRI GATE ===")
     }
 
     func probeSiriGroups() {

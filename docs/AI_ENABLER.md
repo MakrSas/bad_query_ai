@@ -131,6 +131,7 @@ Workflow: .github/workflows/build.yml
 | v10 | Complete Siri gate diagnostics | Unsafe private-function calls crashed on 24A5390f; removed in v11 |
 | v11 | Siri app-group discovery | Resolves known Siri/Assistant group containers through the class-7 primitive |
 | v12 | Siri asset diagnostics | Read-only MobileAsset inventory after partial Apple Intelligence activation |
+| v13 | Isolated Siri predicates | Separately invokes two no-argument gates whose calling convention is supported by recovered callsites |
 
 ## v7 Results
 
@@ -240,6 +241,14 @@ Device screenshots materially change the diagnosis: the system Writing Tools UI 
 ## v12 Asset Diagnostics
 
 v12 adds **Probe AI/Siri Assets (Safe)**. It performs no downloads or writes. It checks canonical system and mobile `AssetsV2` roots, distinguishes an absent/invisible path from a readable path and an existing-but-denied directory, and inventories visible Siri, Intelligence, Eligibility, Speech, and Generative asset types. Known Siri/AI asset directories are also queried individually with errors reported by domain and code.
+
+### v12 device result
+
+Both `/var/MobileAsset/AssetsV2` spellings exist but directory enumeration fails with `NSCocoaErrorDomain` code 257 (sandbox denial). Only the OSEligibility child leaks existence; all other child probes are `NOT_VISIBLE`, which cannot distinguish absence from sandbox concealment. Settings reports approximately 7 GB used by Apple Intelligence, so missing all model assets is no longer the leading hypothesis. v12 cannot inspect their composition through the current sandbox.
+
+## v13 Isolated Siri Gates
+
+Recovered iOS 26.1 callsites invoke `AFDeviceSupportsSystemAssistantExperience()` and `AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags()` with no arguments. v13 exposes one button per function and never batches them with the six unverified v10 predicates. Each attempt is persisted before invocation so a crash can be attributed to one exact export. Return value `0` or `1` distinguishes the broad System Assistant Experience decision from its device-capability-plus-FeatureFlags sub-gate.
 
 ## Device
 

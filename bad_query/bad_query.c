@@ -531,6 +531,34 @@ char *siri_group_probe(void) {
     return out;
 }
 
+int siri_gate_call_confirmed(int gate_index) {
+    // Callsites recovered from iOS 26.1 invoke both exports with no arguments.
+    // Keep each invocation isolated so an exact-build behavioral failure cannot
+    // hide the result of another gate, as happened in v10's batch probe.
+    const char *symbols[] = {
+        "AFDeviceSupportsSystemAssistantExperience",
+        "AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags",
+    };
+    if (gate_index < 0 || gate_index >= 2) return -1;
+
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) return -2;
+
+    typedef bool (*confirmed_bool_noargs_fn)(void);
+    confirmed_bool_noargs_fn fn =
+        (confirmed_bool_noargs_fn)dlsym(assistant, symbols[gate_index]);
+    if (!fn) {
+        dlclose(assistant);
+        return -3;
+    }
+
+    int result = fn() ? 1 : 0;
+    dlclose(assistant);
+    return result;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.
