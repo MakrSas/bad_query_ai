@@ -588,6 +588,23 @@ The four public PoCs were checked against the established iLoader boundary:
 | CFPrefsZeroFile | `cfprefsd` can create one selected missing, root-owned, zero-byte file through a race | Cannot replace, truncate, or supply contents for an existing FeatureFlags or Siri plist. It is not an enablement route and risks a denial of service if misused. |
 | InstallCoordination | Attacker-controlled persisted install state can cause `installcoordinationd` to follow a final symlink; the public PoC demonstrates only a scratch target in its own system group | This is the only unclosed candidate, but no proof yet establishes a safe write to a Siri preference or MobileGestalt's hardware source. Do not target a real system plist without a recoverable, separately approved validation plan. |
 
+## v47 InstallCoordination Runtime Schema
+
+v47 reads Objective-C runtime metadata from the exact installed `InstallCoordination.framework`. It does not instantiate a coordinator or promise, establish an XPC connection, stage an archive, create a graph, or alter a daemon-owned file.
+
+### v47 device result
+
+The framework is present and exports 63 Objective-C classes; 37 classes matched the coordinator/promise/placeholder filter. The runtime establishes the actual persisted object family rather than a simple directory-scanning protocol:
+
+- `IXAppInstallCoordinatorSeed` contains a UUID, creator identifier/EUID, intent, `IXApplicationIdentity`, and installation domain; `IXAppInstallCoordinator` wraps that seed and has an explicit `isRegisteredWithDaemon` state.
+- `IXDataPromiseSeed` has a name, UUID, creator and disk-space metadata. Derived seeds include `IXPromisedTransferToPathSeed`, which carries an `NSURL` transfer path plus copy/delta-copy booleans, and several owned/opaque/streaming variants.
+- `IXServerConnection` maintains an `NSXPCConnection` plus dictionaries of registered coordinator and promise instances. Its methods explicitly register/unregister updates with the daemon, confirming that a file placed in `PromiseStaging`, `DataPromises`, or `Coordinators` alone is not sufficient to make `installcoordinationd` execute an operation.
+- The framework also exposes testing-oriented selectors such as `killDaemonForTesting`, `setTestingEnabled:`, and `setSkipIntentValidation:`. Their presence is not an available privilege: no entitlement or callable path was established, and they must not be invoked from the sideloaded build.
+
+The string scan returned `OPEN_DENIED errno=2` even though the framework was successfully loaded for runtime inspection. This is not material to the result; class and selector metadata were obtained from the loaded image.
+
+Consequently, v46 proves write access to the three state directories, while v47 proves that a valid chain additionally requires an exact keyed-archive/seed relationship and daemon-side registration/reload behaviour. Neither result establishes an arbitrary file write. The next work, if any, should remain read-only: determine how a normal system-owned install populates and archives these seeds, or obtain an independently recoverable restart path for `installcoordinationd`. No synthetic graph should be staged against a system preference target.
+
 ## Current Boundary
 
 The remaining blocked boundary is no longer a discovered flag or preference. Achieving a persistent system-wide Siri state needs one of: (1) a write primitive for MobileGestalt's real hardware source rather than its boot-regenerated CacheExtra; (2) a jailbreak/root/launchd capability to restart `assistantd` after the session spoof; or (3) an Apple/private entitlement granting Mach lookup to `com.apple.siri.orchestration.capabilities`. Standard iLoader signing provides none of these; its sandbox explicitly rejects the XPC and process-control options.
