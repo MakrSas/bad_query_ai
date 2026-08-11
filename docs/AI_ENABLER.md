@@ -168,6 +168,13 @@ The key conclusion is that feature-flag interception is a process-boundary probl
 - Removed the crash-prone eligibility calls from the v8 UI and made their native entry points inert pending exact ABI recovery.
 - Added a complete `CacheExtra` snapshot action that logs sorted key/type/value rows and saves XML/text copies in the app's Documents directory.
 
+### v8 Build Verification
+
+- Commit: `af9b0a7` (`v8: safe feature flag diagnostics and CacheExtra dump`)
+- GitHub Actions run: [31521456172](https://github.com/MakrSas/bad_query_ai/actions/runs/31521456172)
+- Result: successful unsigned iPhoneOS build, IPA/TIPA packaging, and artifact upload.
+- Artifacts: `bad_query_ai.ipa` and `bad_query_ai.tipa`, 85,467 bytes each.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
