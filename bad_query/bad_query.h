@@ -32,6 +32,7 @@ char *siri_group_probe(void);
 int siri_gate_call_confirmed(int gate_index);
 char *siri_gate_code_dump(void);
 char *siri_gate_target_dump(void);
+char *siri_gate_selector_probe(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);

@@ -16,6 +16,7 @@
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
+#include <objc/runtime.h>
 #if __has_include(<ptrauth.h>)
 #include <ptrauth.h>
 #endif
@@ -682,6 +683,66 @@ char *siri_gate_target_dump(void) {
         }
     }
 
+    dlclose(assistant);
+    return out;
+}
+
+static uintptr_t decode_adrp_target(uintptr_t pc, uint32_t instruction) {
+    int64_t imm = (int64_t)(((instruction >> 29) & 0x3) |
+                            (((instruction >> 5) & 0x7FFFF) << 2));
+    if (imm & (1LL << 20)) imm |= ~((1LL << 21) - 1);
+    return (uintptr_t)((int64_t)(pc & ~(uintptr_t)0xFFF) + (imm << 12));
+}
+
+char *siri_gate_selector_probe(void) {
+    const char *symbols[] = {
+        "AFDeviceSupportsSAE",
+        "AFDeviceSupportsSystemAssistantExperience",
+        NULL
+    };
+    char *out = calloc(1, 8192);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, 8192, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    for (int i = 0; symbols[i]; i++) {
+        void *symbol = dlsym(assistant, symbols[i]);
+        if (!symbol) continue;
+        void *code = symbol;
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+        code = ptrauth_strip(symbol, ptrauth_key_function_pointer);
+#endif
+        uintptr_t start = (uintptr_t)code;
+        const uint32_t *ins = (const uint32_t *)code;
+
+        // The active path loads an Objective-C receiver via ADRP/LDR at +0x30
+        // and tail-branches at +0x44 to an objc_msgSend$selector stub.
+        uintptr_t got_page = decode_adrp_target(start + 0x30, ins[12]);
+        uint64_t ldr_offset = ((ins[13] >> 10) & 0xFFF) << 3;
+        void *receiver = *(void **)(got_page + ldr_offset);
+
+        uint32_t branch = ins[17];
+        int64_t branch_imm = (int64_t)(branch & 0x03FFFFFFU);
+        if (branch_imm & 0x02000000LL) branch_imm |= ~0x03FFFFFFLL;
+        uintptr_t selector_stub = start + 0x44 + (branch_imm << 2);
+        const uint32_t *stub = (const uint32_t *)selector_stub;
+        uintptr_t selector_page = decode_adrp_target(selector_stub, stub[0]);
+        uint64_t add_imm = (stub[1] >> 10) & 0xFFF;
+        if ((stub[1] >> 22) & 1) add_imm <<= 12;
+        const char *selector_name = (const char *)(selector_page + add_imm);
+
+        const char *receiver_class = receiver ? object_getClassName((id)receiver) : NULL;
+        len += snprintf(out + len, 8192 - len,
+                        "%s receiver=%s selector=%s\n",
+                        symbols[i], receiver_class ? receiver_class : "?",
+                        selector_name ? selector_name : "?");
+    }
     dlclose(assistant);
     return out;
 }

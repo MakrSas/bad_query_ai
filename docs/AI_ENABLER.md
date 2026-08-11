@@ -136,6 +136,7 @@ Workflow: .github/workflows/build.yml
 | v15 | SAE locale diagnosis + UI cleanup | Removes obsolete/unsafe buttons and adds one consolidated current-gate report |
 | v16 | Exact-build SAE code dump | Reads the first 256 bytes of two exported gates for 24A5390f call-graph recovery |
 | v17 | Follow SAE branch targets | Decodes export-stub tail branches and dumps their actual destination code |
+| v18 | Hidden SAE selector recovery | Resolves Objective-C receiver and selector names behind the iOS 27 export stubs |
 
 ## v7 Results
 
@@ -285,6 +286,14 @@ ARM64 disassembly proved both exports begin with resolver/dispatch stubs rather 
 ## v17 Branch-Target Recovery
 
 v17 adds **Dump SAE Branch Targets (Safe)**. It decodes direct ARM64 unconditional branch instructions in each stub, skips local control-flow edges, uses `dladdr` to identify every non-local destination, and copies 512 bytes from each destination for offline disassembly. No destination is invoked.
+
+### v17 device result
+
+The common branch resolves to exported `AFDeviceSupportsSAEDeprecated`. The active branches land in stripped 16-byte Objective-C message-send stubs: each loads a selector address, tail-calls a common dispatch function, and ends in trap padding. They are not Boolean implementations and explain why `dladdr` had no name.
+
+## v18 Hidden Selector Recovery
+
+v18 decodes the active export stubs directly: the receiver GOT entry from `ADRP/LDR`, the message stub from the direct branch, and the selector C string from its `ADRP/ADD`. It reports `receiver class + selector` for both false gates without sending either message. The obsolete raw code-dump buttons are removed from the UI.
 
 ## Device
 
