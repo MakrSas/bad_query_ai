@@ -94,6 +94,10 @@ struct AIEnablerView: View {
                         Button("Map Siri Lifecycle Surfaces (Safe)") {
                             mapSiriLifecycleSurfaces()
                         }
+
+                        Button("Map Siri Settings Lifecycle Chain (Safe)") {
+                            mapSiriSettingsLifecycleChain()
+                        }
                     }
 
                     Section("Apply") {
@@ -963,6 +967,19 @@ struct AIEnablerView: View {
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("read-only; no settings, daemon, XPC, or preference was changed")
         appendLog("=== END SIRI LIFECYCLE SURFACES ===")
+    }
+
+    func mapSiriSettingsLifecycleChain() {
+        appendLog("=== SIRI SETTINGS LIFECYCLE CHAIN ===")
+        guard let cString = siri_settings_lifecycle_call_map() else {
+            appendLog("Settings lifecycle map returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("read-only; no Siri setting was changed")
+        appendLog("=== END SIRI SETTINGS LIFECYCLE CHAIN ===")
     }
 
     func probeSiriGroups() {

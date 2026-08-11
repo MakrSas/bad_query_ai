@@ -2094,6 +2094,98 @@ char *siri_lifecycle_surface_map(void) {
     return out;
 }
 
+// v45 follows the exact Settings-facing AFPreferences methods identified by
+// v44. This is disassembly metadata only; no preference setter is called.
+static void append_siri_settings_method_map(Class cls, const char *selector,
+                                            char *out, size_t cap, size_t *len) {
+    Method method = class_getInstanceMethod(cls, sel_registerName(selector));
+    if (!method) {
+        *len += snprintf(out + *len, cap - *len,
+                         "[%s %s] NOT_FOUND\n", class_getName(cls), selector);
+        return;
+    }
+    void *code = (void *)method_getImplementation(method);
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+    code = ptrauth_strip(code, ptrauth_key_function_pointer);
+#endif
+    uintptr_t start = (uintptr_t)code;
+    Dl_info implementation_info = {0};
+    dladdr(code, &implementation_info);
+    *len += snprintf(out + *len, cap - *len,
+                     "[%s %s] IMP=0x%llx imageOffset=0x%llx types=%s\n",
+                     class_getName(cls), selector, (unsigned long long)start,
+                     (unsigned long long)(implementation_info.dli_fbase ?
+                         start - (uintptr_t)implementation_info.dli_fbase : 0),
+                     method_getTypeEncoding(method));
+    const uint32_t *instructions = (const uint32_t *)code;
+    for (size_t n = 0; n < 384 && *len + 512 < cap; n++) {
+        uint32_t instruction = instructions[n];
+        bool is_bl = (instruction & 0xFC000000U) == 0x94000000U;
+        bool is_b = (instruction & 0xFC000000U) == 0x14000000U;
+        if (is_bl || is_b) {
+            int64_t immediate = (int64_t)(instruction & 0x03FFFFFFU);
+            if (immediate & 0x02000000LL) immediate |= ~0x03FFFFFFLL;
+            uintptr_t source = start + n * 4;
+            uintptr_t target = (uintptr_t)((int64_t)source + (immediate << 2));
+            Dl_info target_info = {0};
+            dladdr((void *)target, &target_info);
+            const char *target_selector = NULL;
+            const uint32_t *stub = (const uint32_t *)target;
+            if ((stub[0] & 0x9F00001FU) == 0x90000001U &&
+                (stub[1] & 0xFFC003FFU) == 0x91000021U) {
+                uintptr_t page = decode_adrp_target(target, stub[0]);
+                uint64_t add = (stub[1] >> 10) & 0xFFF;
+                if ((stub[1] >> 22) & 1) add <<= 12;
+                target_selector = (const char *)(page + add);
+            }
+            *len += snprintf(out + *len, cap - *len,
+                             "+0x%04llx %s target=0x%llx selector=%s nearest=%s\n",
+                             (unsigned long long)(n * 4), is_bl ? "BL" : "B",
+                             (unsigned long long)target,
+                             target_selector ? target_selector : "-",
+                             target_info.dli_sname ? target_info.dli_sname : "-");
+        }
+        if (instruction == 0xD65F03C0U) break;
+    }
+}
+
+char *siri_settings_lifecycle_call_map(void) {
+    const size_t cap = 65536;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    Class preferences = objc_getClass("AFPreferences");
+    if (!preferences) {
+        snprintf(out, cap, "AFPreferences=NOT_FOUND\n");
+        dlclose(assistant);
+        return out;
+    }
+    const char *selectors[] = {
+        "setAssistantIsEnabled:",
+        "_setAssistantIsEnabledLocal:",
+        "_assistantEnablementDidChangeExternally",
+        "_registerForAssistantEnablementChangeNotifications",
+        "setLanguageCode:",
+        "_languageCodeDidChangeExternally",
+        "_registerForLanguageCodeChangeNotifications",
+        "synchronizeVoiceServicesLanguageCode",
+        NULL
+    };
+    for (int i = 0; selectors[i] && len + 2048 < cap; i++)
+        append_siri_settings_method_map(preferences, selectors[i], out, cap, &len);
+    len += snprintf(out + len, cap - len,
+                    "read-only; Settings lifecycle methods were not invoked\n");
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

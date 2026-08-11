@@ -58,6 +58,7 @@ char *siri_feature_input_values(void);
 char *siri_daemon_control_probe(void);
 char *siri_daemon_exec_capability_probe(void);
 char *siri_lifecycle_surface_map(void);
+char *siri_settings_lifecycle_call_map(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);

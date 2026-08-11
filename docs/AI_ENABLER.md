@@ -147,6 +147,7 @@ Workflow: .github/workflows/build.yml
 | v26 | Siri preference source map | Recovers the preference API and storage-facing selectors behind `fromPreferences` |
 | v27 | Siri preference key recovery | Decodes key/context objects, reads the raw value, and inventories setter exports |
 | v44 | Siri lifecycle-surface map | Read-only inventory of AssistantServices selectors potentially reached by a system Settings action; no daemon, XPC, or preference operation is invoked |
+| v45 | Siri Settings lifecycle chain | Read-only call map for exact Siri enablement/language setters and their notification handlers; no selector is invoked |
 
 ## v7 Results
 
@@ -549,6 +550,12 @@ The Developer `Internal Features` UI exposed no relevant Apple Intelligence or S
 - `AFPreferences -setLanguageCode:` (`v24@0:8@16`) together with `_registerForLanguageCodeChangeNotifications`, `_languageCodeDidChangeExternally`, and `synchronizeVoiceServicesLanguageCode`.
 
 These are stronger lifecycle candidates than Developer-only UI toggles: their real Settings controls must propagate a change to the Siri stack. The next experiment must use Settings, not an app-local invocation: apply the session spoof and availability write, respring, then perform exactly one reversible action (first disable/enable Siri; separately, change Siri language and return it to `en-US`). Do not reboot. After each action, test the visual Siri UI and capture Current Siri Gates plus Siri Availability.
+
+### Follow-up after Siri off/on
+
+The user performed the disable/enable Siri test, not a language change. Afterwards `SAEByDeviceCapabilityAndFeatureFlags` and `HasGMSCapabilityUnembargoed` remained true, but the persisted availability object contained only `LanguageIsSupported` in its system capabilities (`0x4`) and only `FormFactorSupported | NotCameraRestricted` in its visual capabilities (`0xa`). The previously patched DeviceCapable, GrayMatter, setting, and Apple Intelligence use-case bits were removed.
+
+This proves a normal Settings action reaches a system-owned capability recomputation, but that recomputation consumes a source that still evaluates this physical device as non-capable. It is therefore not a way to preserve a forged `SiriAvailability` object. v45 maps the exact setters and external-notification handlers without invoking them, to recover the daemon-side writer/notification chain before trying another lifecycle action.
 
 ## Reassessment of Related bad_query PoCs
 
