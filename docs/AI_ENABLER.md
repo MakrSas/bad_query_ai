@@ -126,6 +126,7 @@ Workflow: .github/workflows/build.yml
 | v5 | Eligibility write attempts | All 5 methods failed, but verified eligibility auto-updates |
 | v6 | Feature flag attack + container scanner | No set API in FeatureFlags framework; Global.plist absent; container scan empty |
 | v7 | Eligibility API attack + MG key probe | CRASH: wrong API signatures; MG key hashes wrong for iOS 27 |
+| v8 | FeatureFlags ABI + process-boundary strategy | Strategy documented; daemon injection is the primary feasibility gate |
 
 ## v7 Results
 
@@ -152,7 +153,20 @@ Feature flags `Siri.sae_override` and `Siri.assistant_engine_override` remain DI
 5. **XPC to eligibilityd** — direct daemon communication with correct entitlements
 6. **Find correct MG key hashes** — dump all CacheExtra keys from current plist to find real AI-related keys
 7. **NSProcessInfo environment** — some feature flags check env vars at runtime
-8. **Swizzle _os_feature_enabled_impl** — hook the check function at runtime to always return true for Siri flags
+8. **Swizzle _os_feature_enabled_impl** — first prove the exact ABI in-process, then establish a loader for the actual Siri evaluator; an app-local hook is diagnostic only
+
+## v8 Strategy
+
+The complete v8 plan, priority order, experiments, stop conditions, and success definition are documented in [AI_ENABLER_V8_STRATEGY.md](AI_ENABLER_V8_STRATEGY.md).
+
+The key conclusion is that feature-flag interception is a process-boundary problem. A hook inside `bad_query` cannot change checks made by `siriknowledged`, `assistantd`, or SpringBoard. The first implementation task is therefore ABI-safe, observational FeatureFlags instrumentation; the first production gate is proving that a test image can actually load into the evaluator process on this device. If that gate fails, the remaining realistic writable-surface investigation is exact-build MobileGestalt discovery, not more guessed eligibility or out-of-container plist writes.
+
+### v8 Implementation Progress
+
+- Confirmed `_os_feature_enabled_impl` as `bool(const char *domain, const char *feature)` from open-source WebKit SPI declarations.
+- Corrected `ff_check` to use the two-argument ABI.
+- Removed the crash-prone eligibility calls from the v8 UI and made their native entry points inert pending exact ABI recovery.
+- Added a complete `CacheExtra` snapshot action that logs sorted key/type/value rows and saves XML/text copies in the app's Documents directory.
 
 ## Device
 

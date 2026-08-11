@@ -10,7 +10,7 @@ private let kHardwareModel = "oYicEKzVTz4/CxxE05pEgQ"
 private let kCPUChip = "5pYKlGnYYBzGvAlIU8RjEQ"
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v7 — Eligibility API Attack"
+    @State private var log = "AI Enabler v8 — FeatureFlags + CacheExtra diagnostics"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -28,17 +28,10 @@ struct AIEnablerView: View {
                         .disabled(isWorking)
                     }
 
-                    Section("Step 2: Eligibility API") {
-                        Button("Probe All Domains (0-50)") {
-                            probeEligDomains()
+                    Section("Step 2: Eligibility") {
+                        Button("Read Eligibility Status") {
+                            fullStatus()
                         }
-
-                        Button("Force All Inputs (set_input)") {
-                            isWorking = true
-                            forceEligInputs()
-                            isWorking = false
-                        }
-                        .disabled(isWorking)
                     }
 
                     Section("Step 3: Feature Flags") {
@@ -46,15 +39,19 @@ struct AIEnablerView: View {
                             probeAPIs()
                         }
 
-                        Button("Set Feature Flags (all methods)") {
+                        Button("Check Required Flags") {
+                            checkRequiredFlags()
+                        }
+                    }
+
+                    Section("Step 4: MobileGestalt Research") {
+                        Button("Dump All CacheExtra Keys") {
                             isWorking = true
-                            setFeatureFlags()
+                            dumpCacheExtra()
                             isWorking = false
                         }
                         .disabled(isWorking)
-                    }
 
-                    Section("Step 4: Extra MG Keys") {
                         Button("Probe Siri/AI MG Keys") {
                             probeMGKeys()
                         }
@@ -90,7 +87,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v7" }
+                            Button("Clear") { log = "AI Enabler v8" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -135,6 +132,17 @@ struct AIEnablerView: View {
         if let s = o as? String { return s }
         if let n = o as? NSNumber { return n.stringValue }
         return String(describing: o)
+    }
+
+    func plistValueDescription(_ value: Any) -> String {
+        if let value = value as? Bool { return "bool:\(value)" }
+        if let value = value as? NSNumber { return "number:\(value)" }
+        if let value = value as? String { return "string:\(value)" }
+        if let value = value as? Data { return "data:\(value.count)b:\(value.base64EncodedString())" }
+        if let value = value as? Date { return "date:\(ISO8601DateFormatter().string(from: value))" }
+        if let value = value as? [Any] { return "array[\(value.count)]:\(value)" }
+        if let value = value as? [String: Any] { return "dict[\(value.count)]:\(value)" }
+        return "\(type(of: value)):\(String(describing: value))"
     }
 
     // MARK: - Step 1: MobileGestalt
@@ -394,6 +402,50 @@ struct AIEnablerView: View {
 
     // MARK: - Step 4: Extra MG Keys
 
+    func dumpCacheExtra() {
+        appendLog("=== CACHEEXTRA SNAPSHOT ===")
+        let h = sandbox(mgDir, label: "mg-dump")
+        guard h >= 0 else { return }
+        defer { bad_query_release(h) }
+
+        let mgURL = URL(fileURLWithPath: mgPath)
+        guard let root = NSDictionary(contentsOf: mgURL) as? [String: Any],
+              let cacheExtra = root["CacheExtra"] as? [String: Any] else {
+            appendLog("can't parse CacheExtra")
+            return
+        }
+
+        let sortedKeys = cacheExtra.keys.sorted()
+        let lines = sortedKeys.map { key in
+            "\(key)\t\(plistValueDescription(cacheExtra[key]!))"
+        }
+
+        appendLog("keys=\(sortedKeys.count)")
+        for line in lines { appendLog(line) }
+
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let plistURL = documents.appendingPathComponent("CacheExtra-latest.plist")
+        let textURL = documents.appendingPathComponent("CacheExtra-latest.txt")
+        do {
+            let plist = try PropertyListSerialization.data(
+                fromPropertyList: cacheExtra,
+                format: .xml,
+                options: 0
+            )
+            try plist.write(to: plistURL, options: .atomic)
+            try (lines.joined(separator: "\n") + "\n").write(
+                to: textURL,
+                atomically: true,
+                encoding: .utf8
+            )
+            appendLog("saved: Documents/\(plistURL.lastPathComponent)")
+            appendLog("saved: Documents/\(textURL.lastPathComponent)")
+        } catch {
+            appendLog("snapshot save FAIL: \(error.localizedDescription)")
+        }
+        appendLog("=== END SNAPSHOT ===")
+    }
+
     func probeMGKeys() {
         appendLog("=== MG KEY PROBE ===")
         if let cStr = mg_probe_extra_keys() {
@@ -417,6 +469,23 @@ struct AIEnablerView: View {
     }
 
     // MARK: - Diagnostics
+
+    func checkRequiredFlags() {
+        appendLog("=== REQUIRED FEATURE FLAGS ===")
+        let flags: [(String, String)] = [
+            ("Siri", "sae_override"),
+            ("Siri", "assistant_engine_override"),
+            ("SiriUI", "sae"),
+        ]
+        for (domain, feature) in flags {
+            let result = ff_check(domain, feature)
+            let value = result == 1 ? "ENABLED" : result == 0 ? "disabled" : "err(\(result))"
+            appendLog("\(domain).\(feature)=\(value)")
+        }
+        appendLog("ABI=bool(const char *, const char *)")
+        appendLog("scope=current process only")
+        appendLog("=== END FLAGS ===")
+    }
 
     func fullStatus() {
         appendLog("=== FULL STATUS ===")

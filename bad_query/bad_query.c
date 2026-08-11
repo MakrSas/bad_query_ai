@@ -360,15 +360,16 @@ int ff_check(const char *subsystem, const char *flag) {
     if (!ff) ff = dlopen("/System/Library/PrivateFrameworks/FeatureFlags.framework/FeatureFlags", RTLD_LAZY);
     if (!ff) return -1;
 
-    typedef bool (*check_fn)(const char *, const char *, int, void *);
+    // Open-source WebKit declares the private SPI as:
+    // bool _os_feature_enabled_impl(const char *domain, const char *feature);
+    typedef bool (*check_fn)(const char *, const char *);
 
     void *sym = dlsym(ff, "_os_feature_enabled_impl");
     if (!sym) sym = dlsym(ff, "_os_feature_enabled_simple_impl");
 
     int result = -2;
     if (sym) {
-        bool def = false;
-        result = ((check_fn)sym)(subsystem, flag, 0, &def) ? 1 : 0;
+        result = ((check_fn)sym)(subsystem, flag) ? 1 : 0;
     }
 
     dlclose(ff);
@@ -376,59 +377,16 @@ int ff_check(const char *subsystem, const char *flag) {
 }
 
 char *elig_probe_domains(void) {
-    void *el = NULL;
-    const char *paths[] = {
-        "/System/Library/PrivateFrameworks/EligibilityCore.framework/EligibilityCore",
-        "/System/Library/PrivateFrameworks/OSEligibility.framework/OSEligibility",
-        "/usr/lib/libos_eligibility.dylib",
-        NULL
-    };
-    for (int i = 0; paths[i] && !el; i++)
-        el = dlopen(paths[i], RTLD_LAZY);
-    if (!el) return strdup("no_lib");
-
-    typedef int (*get_answer_fn)(int);
-    get_answer_fn fn = (get_answer_fn)dlsym(el, "os_eligibility_get_domain_answer");
-    if (!fn) { dlclose(el); return strdup("no_fn"); }
-
-    size_t cap = 4096;
-    char *out = malloc(cap);
-    if (!out) { dlclose(el); return NULL; }
-    size_t len = 0;
-
-    for (int d = 0; d < 50; d++) {
-        int r = fn(d);
-        if (r > 0) {
-            len += snprintf(out + len, cap - len, "D%d=%d\n", d, r);
-        }
-    }
-
-    if (len == 0)
-        len += snprintf(out + len, cap - len, "no_results\n");
-
-    dlclose(el);
-    return out;
+    // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
+    // point inert until a prototype is recovered from the matching binary.
+    return strdup("disabled:eligibility_abi_unverified\n");
 }
 
 int elig_set_input_try(int p1, int p2, int p3) {
-    void *el = NULL;
-    const char *paths[] = {
-        "/System/Library/PrivateFrameworks/EligibilityCore.framework/EligibilityCore",
-        "/System/Library/PrivateFrameworks/OSEligibility.framework/OSEligibility",
-        "/usr/lib/libos_eligibility.dylib",
-        NULL
-    };
-    for (int i = 0; paths[i] && !el; i++)
-        el = dlopen(paths[i], RTLD_LAZY);
-    if (!el) return -100;
-
-    typedef int (*set_input_fn)(int, int, int);
-    set_input_fn fn = (set_input_fn)dlsym(el, "os_eligibility_set_input");
-    if (!fn) { dlclose(el); return -101; }
-
-    int result = fn(p1, p2, p3);
-    dlclose(el);
-    return result;
+    (void)p1;
+    (void)p2;
+    (void)p3;
+    return -102; // disabled: eligibility ABI unverified
 }
 
 char *mg_probe_extra_keys(void) {

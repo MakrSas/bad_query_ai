@@ -78,3 +78,14 @@ Then:
 2. **Eligibility**: Can READ but NOT WRITE; however, auto-updates after MG spoof
 3. **Feature Flags**: Completely unreachable — need alternative approach (private API, config profile, etc.)
 4. **AI Assets**: At `/var/MobileAsset/` — unreachable via containermanager
+
+## v8 Implication: Access Is Not Evaluation
+
+The access map establishes where `bad_query` can obtain a sandbox extension; it does not establish which process consumes a value. This distinction is decisive for the FeatureFlags route:
+
+- `bad_query` can load and inspect FeatureFlags symbols in its own process.
+- `siriknowledged`, `assistantd`, and SpringBoard perform their own feature checks in separate processes.
+- An app-local swizzle or `DYLD_INSERT_LIBRARIES` setting does not automatically alter those already-running Apple daemons.
+- The MobileGestalt cache remains the only confirmed system-wide writable input, and its opaque `CacheExtra` hashes must be recovered for the exact iOS 27 build rather than copied from another release.
+
+This is why v8 treats daemon-side loading as a feasibility gate and keeps geod preferences, profiles, and trial state as bounded fallback experiments. See [AI_ENABLER_V8_STRATEGY.md](AI_ENABLER_V8_STRATEGY.md).
