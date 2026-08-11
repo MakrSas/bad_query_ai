@@ -464,6 +464,14 @@ The exact Mach service appears in three launch daemon registrations: `com.apple.
 
 v36 parses and prints the three exact launchd dictionaries, extracts each daemon executable from `Program` or `ProgramArguments`, and scans those binaries for Siri/SAE/feature/capability/orchestration strings. This identifies launch conditions, the active owner, and likely upstream keys without invoking or messaging any daemon.
 
+### v36 device result
+
+The iPhone implementation is in `/System/Library/PrivateFrameworks/AssistantServices.framework/assistantd`. Its `ADSiriCapabilitiesStore` updates Siri availability and logs the individual GMS-capable, SAE-override, NL-router, asset, and feature-flag inputs. Most importantly, the executable imports the dedicated `_AFPreferencesSetSiriAvailability` function, while the XPC endpoint is accepted by `ADDaemon`. `generativeexperiencesd` primarily exposes UAF asset paths and generative settings.
+
+## v37 Dedicated Availability Setter Map
+
+v37 resolves likely exported spellings of the dedicated Siri availability setter, reports its image/offset, decodes direct call and selector targets, and includes a compact exact-build code dump. It does not invoke the setter. The goal is to recover its argument ABI and determine whether it publishes the capability-change notification missing from the generic preference write.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

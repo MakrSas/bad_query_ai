@@ -51,6 +51,7 @@ char *siri_capabilities_service_update(void);
 char *siri_capability_service_binary_probe(void);
 char *siri_capability_service_registration_probe(void);
 char *siri_capability_daemon_details(void);
+char *siri_dedicated_setter_map(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);

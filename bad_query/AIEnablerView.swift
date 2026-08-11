@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v36 — inspect capability daemons"
+    @State private var log = "AI Enabler v37 — map dedicated Siri setter"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Inspect Siri Capability Daemons") {
-                            inspectSiriCapabilityDaemons()
+                        Button("Map Dedicated Siri Availability Setter") {
+                            mapDedicatedSiriSetter()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v36" }
+                            Button("Clear") { log = "AI Enabler v37" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -874,6 +874,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI CAPABILITY DAEMON DETAILS ===")
+    }
+
+    func mapDedicatedSiriSetter() {
+        appendLog("=== DEDICATED SIRI AVAILABILITY SETTER ===")
+        guard let cString = siri_dedicated_setter_map() else {
+            appendLog("setter map returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END DEDICATED SIRI AVAILABILITY SETTER ===")
     }
 
     func probeSiriGroups() {
