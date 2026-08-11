@@ -1625,7 +1625,7 @@ char *siri_capabilities_service_update(void) {
         if (value) callback_value = CFRetain((CFTypeRef)value);
         dispatch_semaphore_signal(sem);
     };
-    ((void (*)(id, SEL, id))objc_msgSend)(client, update_sel, completion);
+    ((void (*)(id, SEL, void *))objc_msgSend)(client, update_sel, (void *)completion);
     long wait_result = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 8LL * NSEC_PER_SEC));
     len += snprintf(out + len, cap - len, "update.sent=1 callback=%d timeout=%d\n", callback_called, wait_result != 0);
     append_cf_description(out, cap, &len, "callback.value", callback_value);
