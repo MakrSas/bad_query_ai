@@ -15,7 +15,6 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <libproc.h>
 #include <signal.h>
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -1963,16 +1962,24 @@ char *siri_daemon_control_probe(void) {
     const size_t cap = 16384;
     char *out = calloc(1, cap); if (!out) return NULL;
     size_t len = 0;
-    int bytes = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+    void *libproc = dlopen("/usr/lib/libproc.dylib", RTLD_NOW | RTLD_LOCAL);
+    typedef int (*proc_listpids_fn)(uint32_t, uint32_t, void *, int);
+    typedef int (*proc_name_fn)(int, void *, uint32_t);
+    proc_listpids_fn list_pids = libproc ? (proc_listpids_fn)dlsym(libproc, "proc_listpids") : NULL;
+    proc_name_fn process_name = libproc ? (proc_name_fn)dlsym(libproc, "proc_name") : NULL;
+    if (!list_pids || !process_name) { snprintf(out, cap, "libproc=SYMBOLS_MISSING\n"); if (libproc) dlclose(libproc); return out; }
+    const uint32_t proc_all_pids = 1;
+    const size_t proc_name_max = 4096;
+    int bytes = list_pids(proc_all_pids, 0, NULL, 0);
     if (bytes <= 0) { snprintf(out, cap, "proc_listpids=FAILED errno=%d\n", errno); return out; }
     pid_t *pids = calloc(1, (size_t)bytes);
     if (!pids) { snprintf(out, cap, "pid_allocation=FAILED\n"); return out; }
-    int used = proc_listpids(PROC_ALL_PIDS, 0, pids, bytes);
+    int used = list_pids(proc_all_pids, 0, pids, bytes);
     const char *targets[] = { "assistantd", "siriknowledged", "generativeexperiencesd", "SpringBoard", NULL };
     for (int i = 0; i < used / (int)sizeof(pid_t) && len + 512 < cap; i++) {
         if (pids[i] <= 0) continue;
-        char name[PROC_PIDPATHINFO_MAXSIZE] = {0};
-        int result = proc_name(pids[i], name, sizeof(name));
+        char name[4096] = {0};
+        int result = process_name(pids[i], name, (uint32_t)proc_name_max);
         if (result <= 0) continue;
         for (int t = 0; targets[t]; t++) {
             if (!strcmp(name, targets[t])) {
@@ -1984,6 +1991,7 @@ char *siri_daemon_control_probe(void) {
         }
     }
     free(pids);
+    dlclose(libproc);
     if (len == 0) len += snprintf(out + len, cap - len, "targetPids=NOT_VISIBLE\n");
     len += snprintf(out + len, cap - len, "read-only; no process signalled\n");
     return out;
