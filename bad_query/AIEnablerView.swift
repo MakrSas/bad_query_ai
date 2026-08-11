@@ -9,8 +9,32 @@ private let kProductType = "h9jDsbgj7xIVeIQ8S3/X3Q"
 private let kHardwareModel = "oYicEKzVTz4/CxxE05pEgQ"
 private let kCPUChip = "5pYKlGnYYBzGvAlIU8RjEQ"
 
+// iOS 26+ exposes component-specific identity mirrors. v8 showed that the
+// classic ProductType/TargetSubType spoof left these at iPhone15,4/D37AP.
+private let productTypeMirrorKeys = [
+    "+1TeoctsaQC55zwHZ6MESg", // ProductTypeDescForAudio
+    "0+nc/Udy4WNG8S+Q7a/s1A", // ThinningProductType
+    "G91h5IuJvXISeyngNFqEpg", // ProductTypeDescForUserVisibility
+    "GEsznZwAYGOa1a67QU1Uew", // ProductTypeDescForPowerPerf
+    "GqAdWRLnC7oYQrNYF48VYA", // SubProductType
+    "MKE8hwsOxxRCtwBk2aDBZA", // ProductTypeDescForAutomatedTesting
+    "myx96YOqBSDzLwljSYWBiQ", // ProductTypeDescForCamera
+    "xNN67KktpWp7syTT3S1BFA", // ProductTypeDescForAnalytics
+]
+
+private let hardwareModelMirrorKeys = [
+    "/YYygAofPDbhrwToVsXdeA", // HWModelStr
+    "GGIIDN/ANr8X2WrgS6nBYQ", // HWModelUniqueStr
+    "ZGraRMW0TsxCvONeeJ5C2w", // HWModelDescriptionForUserVisibility
+    "b4e7mEbjqfewD6oXmo9U5g", // HWModelDescriptionForPowerPerf
+    "dW5fpt/6HhaTbnK/UqL6cA", // HWModelDescriptionForAudio
+    "oQNDePXjSD1z7W0ddqt9tg", // HWModelDescriptionForAutomatedTesting
+    "uCIk6n9Am5fsV2cTjhqFQw", // HWModelDescriptionForAnalytics
+    "yAfB6E2v0++rHtdW7SDg8w", // HWModelDescriptionForCamera
+]
+
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v8 — FeatureFlags + CacheExtra diagnostics"
+    @State private var log = "AI Enabler v9 — Full iOS 27 identity spoof"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -23,6 +47,13 @@ struct AIEnablerView: View {
                         Button("Apply MG Spoof") {
                             isWorking = true
                             applyMG()
+                            isWorking = false
+                        }
+                        .disabled(isWorking)
+
+                        Button("Apply Full Identity Spoof (v9)") {
+                            isWorking = true
+                            applyMG(fullIdentity: true)
                             isWorking = false
                         }
                         .disabled(isWorking)
@@ -87,7 +118,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v8" }
+                            Button("Clear") { log = "AI Enabler v9" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -147,8 +178,8 @@ struct AIEnablerView: View {
 
     // MARK: - Step 1: MobileGestalt
 
-    func applyMG() {
-        appendLog("=== MG SPOOF ===")
+    func applyMG(fullIdentity: Bool = false) {
+        appendLog(fullIdentity ? "=== FULL IDENTITY SPOOF v9 ===" : "=== MG SPOOF ===")
         let h = sandbox(mgDir, label: "mg")
         guard h >= 0 else { return }
         defer { bad_query_release(h) }
@@ -172,6 +203,10 @@ struct AIEnablerView: View {
         ce[kProductType] = "iPhone16,1"
         ce[kHardwareModel] = "D83AP"
         ce[kCPUChip] = "t8130"
+        if fullIdentity {
+            for key in productTypeMirrorKeys { ce[key] = "iPhone16,1" }
+            for key in hardwareModelMirrorKeys { ce[key] = "D83AP" }
+        }
         dict["CacheExtra"] = ce
 
         do {
@@ -185,6 +220,9 @@ struct AIEnablerView: View {
                 try FileManager.default.moveItem(at: tmp, to: mgURL)
             }
             appendLog("plist OK: AI=1, iPhone16,1/D83AP/t8130")
+            if fullIdentity {
+                appendLog("identity mirrors: product=\(productTypeMirrorKeys.count), hardware=\(hardwareModelMirrorKeys.count)")
+            }
         } catch {
             appendLog("FAIL: \(error.localizedDescription)"); return
         }
@@ -192,6 +230,11 @@ struct AIEnablerView: View {
         mg_notify_cache_changed()
         appendLog("cache notify sent")
         appendLog("live: AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?")")
+        if fullIdentity {
+            appendLog("live HWModelStr=\(mgStr("/YYygAofPDbhrwToVsXdeA") ?? "?")")
+            appendLog("live ProductTypeDescForAnalytics=\(mgStr("xNN67KktpWp7syTT3S1BFA") ?? "?")")
+            appendLog("respring required; reboot restores hardware-generated cache")
+        }
     }
 
     // MARK: - Step 2: Eligibility API
@@ -491,6 +534,8 @@ struct AIEnablerView: View {
         appendLog("=== FULL STATUS ===")
 
         appendLog("[MG] AI=\(mg_get_bool_answer(kAICapability)) model=\(mgStr(kProductType) ?? "?") hw=\(mgStr(kHardwareModel) ?? "?") cpu=\(mgStr(kCPUChip) ?? "?")")
+        appendLog("[MG-ID] HWModelStr=\(mgStr("/YYygAofPDbhrwToVsXdeA") ?? "?") HWUnique=\(mgStr("GGIIDN/ANr8X2WrgS6nBYQ") ?? "?")")
+        appendLog("[MG-ID] ProductAnalytics=\(mgStr("xNN67KktpWp7syTT3S1BFA") ?? "?") ProductUser=\(mgStr("G91h5IuJvXISeyngNFqEpg") ?? "?")")
 
         if let data = try? Data(contentsOf: URL(fileURLWithPath: "/var/db/eligibilityd/eligibility.plist")),
            let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {

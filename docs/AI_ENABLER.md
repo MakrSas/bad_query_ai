@@ -127,6 +127,7 @@ Workflow: .github/workflows/build.yml
 | v6 | Feature flag attack + container scanner | No set API in FeatureFlags framework; Global.plist absent; container scan empty |
 | v7 | Eligibility API attack + MG key probe | CRASH: wrong API signatures; MG key hashes wrong for iOS 27 |
 | v8 | FeatureFlags ABI + process-boundary strategy | Strategy documented; daemon injection is the primary feasibility gate |
+| v9 | Full iOS 27 MobileGestalt identity spoof | Pending device test; patches newly discovered ProductType/HWModel mirrors |
 
 ## v7 Results
 
@@ -174,6 +175,21 @@ The key conclusion is that feature-flag interception is a process-boundary probl
 - GitHub Actions run: [31521456172](https://github.com/MakrSas/bad_query_ai/actions/runs/31521456172)
 - Result: successful unsigned iPhoneOS build, IPA/TIPA packaging, and artifact upload.
 - Artifacts: `bad_query_ai.ipa` and `bad_query_ai.tipa`, 85,467 bytes each.
+
+## v9 Device-Dump Analysis
+
+The v8 device dump contained 82 `CacheExtra` keys. It proved that the original four-key spoof was internally inconsistent:
+
+- `h9jDsbgj7xIVeIQ8S3/X3Q` (`ProductType`) was spoofed to `iPhone16,1`.
+- `oYicEKzVTz4/CxxE05pEgQ` is `TargetSubType`, not the primary hardware-model string.
+- `/YYygAofPDbhrwToVsXdeA` (`HWModelStr`) remained `D37AP`.
+- `GGIIDN/ANr8X2WrgS6nBYQ` (`HWModelUniqueStr`) remained `D37AP`.
+- Eight iOS 26+ ProductType component mirrors remained `iPhone15,4`.
+- Eight iOS 26+ HWModel component mirrors remained `D37AP`.
+
+This creates a plausible iOS 27 hard-gate path: eligibility reads the classic spoofed keys and becomes eligible, while a Siri consumer can read a newer component-specific identity and still see the unsupported device.
+
+v9 adds a separate **Apply Full Identity Spoof** action. It preserves the existing backup, writes `iPhone16,1` to the confirmed ProductType mirrors and `D83AP` to the confirmed HWModel mirrors, then requires a respring. Camera/audio-specific mirrors are included, so temporary subsystem instability is possible; reboot remains the hardware-cache rollback path.
 
 ## Device
 
