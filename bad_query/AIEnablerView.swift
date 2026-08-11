@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v18 — identify hidden SAE selectors"
+    @State private var log = "AI Enabler v19 — deprecated SAE dependencies"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -65,6 +65,10 @@ struct AIEnablerView: View {
 
                         Button("Identify Hidden SAE Selectors") {
                             identifySiriGateSelectors()
+                        }
+
+                        Button("Identify Deprecated SAE Dependencies") {
+                            identifyDeprecatedSiriDependencies()
                         }
                     }
 
@@ -117,7 +121,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v18" }
+                            Button("Clear") { log = "AI Enabler v19" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -570,6 +574,7 @@ struct AIEnablerView: View {
             (3, "DeviceSupportsSiriUOD"),
             (4, "HasGMSCapabilityUnembargoed"),
             (5, "LocaleSupportsSAE"),
+            (6, "DeviceSupportsSAEDeprecated"),
         ]
         for (index, name) in gates {
             UserDefaults.standard.set(name, forKey: "LastSiriGateAttempt")
@@ -625,6 +630,21 @@ struct AIEnablerView: View {
         }
         appendLog("read-only; selectors not invoked")
         appendLog("=== END HIDDEN SAE SELECTORS ===")
+    }
+
+    func identifyDeprecatedSiriDependencies() {
+        appendLog("=== DEPRECATED SAE DEPENDENCIES ===")
+        guard let cString = siri_deprecated_dependency_probe() else {
+            appendLog("probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only; dependencies not invoked")
+        appendLog("=== END DEPRECATED SAE DEPENDENCIES ===")
     }
 
     func probeSiriGroups() {

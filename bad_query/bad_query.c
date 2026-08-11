@@ -546,8 +546,9 @@ int siri_gate_call_confirmed(int gate_index) {
         "AFDeviceSupportsSiriUOD",
         "AFHasGMSCapabilityUnembargoed",
         "AFLocaleSupportsSAE",
+        "AFDeviceSupportsSAEDeprecated",
     };
-    if (gate_index < 0 || gate_index >= 6) return -1;
+    if (gate_index < 0 || gate_index >= 7) return -1;
 
     void *assistant = dlopen(
         "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
@@ -743,6 +744,64 @@ char *siri_gate_selector_probe(void) {
                         symbols[i], receiver_class ? receiver_class : "?",
                         selector_name ? selector_name : "?");
     }
+    dlclose(assistant);
+    return out;
+}
+
+char *siri_deprecated_dependency_probe(void) {
+    char *out = calloc(1, 16384);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, 16384, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+
+    void *symbol = dlsym(assistant, "AFDeviceSupportsSAEDeprecated");
+    if (!symbol) {
+        snprintf(out, 16384, "AFDeviceSupportsSAEDeprecated=NO_SYMBOL\n");
+        dlclose(assistant);
+        return out;
+    }
+    void *code = symbol;
+#if __has_include(<ptrauth.h>) && defined(__arm64e__)
+    code = ptrauth_strip(symbol, ptrauth_key_function_pointer);
+#endif
+    uintptr_t start = (uintptr_t)code;
+    const uint32_t *ins = (const uint32_t *)code;
+    len += snprintf(out + len, 16384 - len,
+                    "AFDeviceSupportsSAEDeprecated=AND(dependency1,dependency2,dependency3)\n");
+
+    int dependency = 0;
+    for (size_t n = 0; n < 40; n++) {
+        uint32_t instruction = ins[n];
+        if ((instruction & 0xFC000000U) != 0x94000000U) continue; // BL imm26
+        int64_t immediate = (int64_t)(instruction & 0x03FFFFFFU);
+        if (immediate & 0x02000000LL) immediate |= ~0x03FFFFFFLL;
+        uintptr_t source = start + n * 4;
+        uintptr_t target = (uintptr_t)((int64_t)source + (immediate << 2));
+        Dl_info info = {0};
+        dladdr((void *)target, &info);
+        dependency++;
+        len += snprintf(out + len, 16384 - len,
+                        "dependency%d target=0x%llx nearest=%s symbolOffset=0x%llx\n",
+                        dependency, (unsigned long long)target,
+                        info.dli_sname ? info.dli_sname : "?",
+                        (unsigned long long)(info.dli_saddr ? target - (uintptr_t)info.dli_saddr : 0));
+        if (dependency == 3) break; // the following calls are logging only
+    }
+
+    // In 24A5390f the third dependency receives a static C string in x0.
+    uintptr_t string_page = decode_adrp_target(start + 0x2c, ins[11]);
+    uint64_t add_imm = (ins[12] >> 10) & 0xFFF;
+    if ((ins[12] >> 22) & 1) add_imm <<= 12;
+    const char *argument = (const char *)(string_page + add_imm);
+    len += snprintf(out + len, 16384 - len, "dependency3.argument=%s\n",
+                    argument ? argument : "?");
+
     dlclose(assistant);
     return out;
 }

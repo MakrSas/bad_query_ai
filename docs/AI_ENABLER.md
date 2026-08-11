@@ -137,6 +137,7 @@ Workflow: .github/workflows/build.yml
 | v16 | Exact-build SAE code dump | Reads the first 256 bytes of two exported gates for 24A5390f call-graph recovery |
 | v17 | Follow SAE branch targets | Decodes export-stub tail branches and dumps their actual destination code |
 | v18 | Hidden SAE selector recovery | Resolves Objective-C receiver and selector names behind the iOS 27 export stubs |
+| v19 | Deprecated SAE dependency recovery | Decomposes the cached device-support source into its three internal predicates |
 
 ## v7 Results
 
@@ -294,6 +295,14 @@ The common branch resolves to exported `AFDeviceSupportsSAEDeprecated`. The acti
 ## v18 Hidden Selector Recovery
 
 v18 decodes the active export stubs directly: the receiver GOT entry from `ADRP/LDR`, the message stub from the direct branch, and the selector C string from its `ADRP/ADD`. It reports `receiver class + selector` for both false gates without sending either message. The obsolete raw code-dump buttons are removed from the UI.
+
+### v18 device result
+
+`AFDeviceSupportsSAE` dispatches to `+[AFSystemAssistantExperienceStatusManager deviceSupportsSAE]`; `AFDeviceSupportsSystemAssistantExperience` dispatches to `+[AFSystemAssistantExperienceStatusManager isSAEEnabled]`. Recovered iOS 26.1 implementation shows both are cached fields. Cache refresh sources `deviceSupportsSAE` from `AFDeviceSupportsSAEDeprecated()` and derives `saeEnabled` by ANDing that value with the System Assistant Experience feature flag. The successful newer capability-plus-flags predicate is therefore not the value currently feeding this cache.
+
+## v19 Deprecated Gate Dependencies
+
+Exact-build v17 bytes show `AFDeviceSupportsSAEDeprecated()` computes the AND of three internal calls before logging. v19 reports the three direct branch targets, their nearest exported symbols, and the static string passed to the third dependency. It also adds the deprecated gate itself to the consolidated Boolean report. No dependency is invoked by the identification action.
 
 ## Device
 
