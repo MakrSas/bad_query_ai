@@ -54,6 +54,7 @@ char *siri_capability_daemon_details(void);
 char *siri_dedicated_setter_map(void);
 char *siri_dedicated_setter_apply(void);
 char *siri_feature_input_runtime_map(void);
+char *siri_feature_input_values(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);

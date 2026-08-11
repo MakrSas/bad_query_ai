@@ -1914,6 +1914,49 @@ char *siri_feature_input_runtime_map(void) {
     dlclose(assistant); return out;
 }
 
+char *siri_feature_input_values(void) {
+    const size_t cap = 8192;
+    char *out = calloc(1, cap); if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen("/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices", RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) { snprintf(out, cap, "AssistantServices=NOT_LOADED\n"); return out; }
+    typedef bool (*bool_class_fn)(id, SEL);
+    Class flags = objc_getClass("AFFeatureFlags");
+    const char *flag_methods[] = {
+        "isSystemAssistantExperienceEnabled", "isNLRouterEnabled", "isAssistantEngineEnabled",
+        "isSiriXEnabled", "isLinwoodEnabled", "isLinwoodOverrideEnabled",
+        "isSAELocaleOverrideEnabled", "isSiriUODForceEnabledForDevice", NULL
+    };
+    for (int i = 0; flags && flag_methods[i]; i++) {
+        SEL sel = sel_registerName(flag_methods[i]);
+        Method method = class_getClassMethod(flags, sel);
+        len += snprintf(out + len, cap - len, "AFFeatureFlags.%s=%s\n", flag_methods[i],
+                        method && ((bool_class_fn)objc_msgSend)((id)flags, sel) ? "TRUE" : "false");
+    }
+    if (!flags) len += snprintf(out + len, cap - len, "AFFeatureFlags=NOT_FOUND\n");
+    Class gm = objc_getClass("GMAvailabilityWrapper");
+    const char *gm_methods[] = {
+        "isDeviceEligible", "isOkayToHaveAsset", "wasEverAvailable",
+        "enhancedSiriWasEverAvailable", "shouldShowEnhancedSiri", "isSensitiveRegionForEnhancedSiri", NULL
+    };
+    for (int i = 0; gm && gm_methods[i]; i++) {
+        SEL sel = sel_registerName(gm_methods[i]);
+        Method method = class_getClassMethod(gm, sel);
+        len += snprintf(out + len, cap - len, "GMAvailabilityWrapper.%s=%s\n", gm_methods[i],
+                        method && ((bool_class_fn)objc_msgSend)((id)gm, sel) ? "TRUE" : "false");
+    }
+    if (gm) {
+        SEL availability_sel = sel_registerName("enhancedSiriAvailability");
+        Method method = class_getClassMethod(gm, availability_sel);
+        if (method) {
+            int64_t value = ((int64_t (*)(id, SEL))objc_msgSend)((id)gm, availability_sel);
+            len += snprintf(out + len, cap - len, "GMAvailabilityWrapper.enhancedSiriAvailability=%lld\n", (long long)value);
+        }
+    } else len += snprintf(out + len, cap - len, "GMAvailabilityWrapper=NOT_FOUND\n");
+    len += snprintf(out + len, cap - len, "read-only; no values changed\n");
+    dlclose(assistant); return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

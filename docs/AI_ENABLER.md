@@ -498,6 +498,14 @@ The remaining viable technical paths are: a persistent write to the underlying M
 
 v40 inspects the runtime metadata of the exact `assistantd` capability inputs named in its binary strings: `SAEFeatureFlagSet`, `AFFeatureFlags`, and `GMAvailabilityWrapper`. It lists methods, class methods, properties, and ivars without creating objects or calling private selectors. This is the remaining low-risk route to find a writable in-process preference/input API that avoids direct access to the protected FeatureFlags plist.
 
+### v40 device result
+
+`SAEFeatureFlagSet` is not loaded in the sideloaded app. `AFFeatureFlags` exposes a large set of class-level feature getters, including SAE, SiriX, NL Router, assistant-engine, Linwood, and UOD getters, but no relevant setter; the sole exposed setter concerns location-search continuity. `GMAvailabilityWrapper` exposes read/update APIs for Apple Intelligence eligibility, asset readiness, access restriction, and opt-in state, but no direct capability-bit setter. No immediate writable feature-flag route was found.
+
+## v41 Feature-Input Values
+
+v41 calls only exact no-argument boolean getters already enumerated in v40. It records the core `AFFeatureFlags` values and `GMAvailabilityWrapper` eligibility/visibility values plus its availability enum. Run it after applying the session MobileGestalt spoof, before respring, to distinguish the current-process inputs from the stale daemon state. It performs no mutation.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)
