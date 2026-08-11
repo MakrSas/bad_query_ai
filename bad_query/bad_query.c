@@ -216,6 +216,44 @@ void bad_query_release(int64_t handle) {
     if (release_extension) release_extension(handle);
 }
 
+// MobileGestalt direct API - reads values from the running MobileGestaltHelper daemon
+// This tells us what the system ACTUALLY sees, not just what's in the plist
+typedef void *(*MGCopyAnswerFn)(const void *);
+typedef bool (*MGGetBoolAnswerFn)(const void *);
+
+void *mg_copy_answer(const char *key) {
+    void *mg = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_NOW | RTLD_LOCAL);
+    if (!mg) return NULL;
+    MGCopyAnswerFn fn = (MGCopyAnswerFn)dlsym(mg, "MGCopyAnswer");
+    if (!fn) { dlclose(mg); return NULL; }
+    // Create CFString from C string
+    const void *cfKey = CFStringCreateWithCString(NULL, key, 0x08000100); // kCFStringEncodingUTF8
+    if (!cfKey) { dlclose(mg); return NULL; }
+    void *result = fn(cfKey);
+    CFRelease(cfKey);
+    dlclose(mg);
+    return result; // caller must CFRelease
+}
+
+bool mg_get_bool_answer(const char *key) {
+    void *mg = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_NOW | RTLD_LOCAL);
+    if (!mg) return false;
+    MGGetBoolAnswerFn fn = (MGGetBoolAnswerFn)dlsym(mg, "MGGetBoolAnswer");
+    if (!fn) { dlclose(mg); return false; }
+    const void *cfKey = CFStringCreateWithCString(NULL, key, 0x08000100);
+    if (!cfKey) { dlclose(mg); return false; }
+    bool result = fn(cfKey);
+    CFRelease(cfKey);
+    dlclose(mg);
+    return result;
+}
+
+void mg_notify_cache_changed(void) {
+    // Post Darwin notification to tell MobileGestaltHelper to re-read its cache
+    extern uint32_t notify_post(const char *name);
+    notify_post("com.apple.MobileGestalt.cache-changed");
+}
+
 // This still works on 27.0b5
 // I'm including it here because it's very useful in the context of this sandbox escape, which can't access parent directories (most of the time)
 // This enumerates all directories in a given path, so you can, for example, get all container UUIDs, read their container metadata to get their bundle ID, and derive that entirely on-device without a computer

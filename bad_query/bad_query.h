@@ -17,4 +17,9 @@ int64_t bad_query_ex(char* path, bool create, char *group_identifier, uint64_t c
 char *bad_query_list(char *path, int64_t max_inode);
 void bad_query_release(int64_t handle);
 
+// MobileGestalt direct API
+void *mg_copy_answer(const char *key);
+bool mg_get_bool_answer(const char *key);
+void mg_notify_cache_changed(void);
+
 #endif /* bad_query_h */
