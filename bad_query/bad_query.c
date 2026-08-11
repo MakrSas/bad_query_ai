@@ -15,6 +15,8 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <libproc.h>
+#include <signal.h>
 #include <xpc/xpc.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <notify.h>
@@ -1955,6 +1957,36 @@ char *siri_feature_input_values(void) {
     } else len += snprintf(out + len, cap - len, "GMAvailabilityWrapper=NOT_FOUND\n");
     len += snprintf(out + len, cap - len, "read-only; no values changed\n");
     dlclose(assistant); return out;
+}
+
+char *siri_daemon_control_probe(void) {
+    const size_t cap = 16384;
+    char *out = calloc(1, cap); if (!out) return NULL;
+    size_t len = 0;
+    int bytes = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+    if (bytes <= 0) { snprintf(out, cap, "proc_listpids=FAILED errno=%d\n", errno); return out; }
+    pid_t *pids = calloc(1, (size_t)bytes);
+    if (!pids) { snprintf(out, cap, "pid_allocation=FAILED\n"); return out; }
+    int used = proc_listpids(PROC_ALL_PIDS, 0, pids, bytes);
+    const char *targets[] = { "assistantd", "siriknowledged", "generativeexperiencesd", "SpringBoard", NULL };
+    for (int i = 0; i < used / (int)sizeof(pid_t) && len + 512 < cap; i++) {
+        if (pids[i] <= 0) continue;
+        char name[PROC_PIDPATHINFO_MAXSIZE] = {0};
+        int result = proc_name(pids[i], name, sizeof(name));
+        if (result <= 0) continue;
+        for (int t = 0; targets[t]; t++) {
+            if (!strcmp(name, targets[t])) {
+                errno = 0;
+                int signal_zero = kill(pids[i], 0);
+                int signal_errno = errno;
+                len += snprintf(out + len, cap - len, "%s pid=%d signal0=%d errno=%d\n", name, pids[i], signal_zero, signal_errno);
+            }
+        }
+    }
+    free(pids);
+    if (len == 0) len += snprintf(out + len, cap - len, "targetPids=NOT_VISIBLE\n");
+    len += snprintf(out + len, cap - len, "read-only; no process signalled\n");
+    return out;
 }
 
 char *elig_probe_domains(void) {

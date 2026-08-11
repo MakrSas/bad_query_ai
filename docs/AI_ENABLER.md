@@ -506,6 +506,14 @@ v40 inspects the runtime metadata of the exact `assistantd` capability inputs na
 
 v41 calls only exact no-argument boolean getters already enumerated in v40. It records the core `AFFeatureFlags` values and `GMAvailabilityWrapper` eligibility/visibility values plus its availability enum. Run it after applying the session MobileGestalt spoof, before respring, to distinguish the current-process inputs from the stale daemon state. It performs no mutation.
 
+### v41 device result
+
+Before respring, MobileGestalt still reported the original iPhone 15 identity even after the CacheExtra file was written and notified. All relevant `AFFeatureFlags` getters were already true, but `GMAvailabilityWrapper` reported device ineligible, unavailable, and not ever available. This shows the remaining false input is the stale live MobileGestalt/eligibility view, not a disabled local feature flag. Respring reloads that view in new processes but leaves the already-running Siri daemons stale.
+
+## v42 Siri Daemon Control Probe
+
+v42 lists only the PIDs visible to the app for `assistantd`, `siriknowledged`, `generativeexperiencesd`, and SpringBoard, then calls `kill(pid, 0)` as a non-mutating permission check. It never sends a real signal. The result determines whether a later, separately authorised daemon-restart test can reload session-spoofed MobileGestalt without a device reboot.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

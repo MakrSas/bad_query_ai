@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v41 — read Siri feature inputs"
+    @State private var log = "AI Enabler v42 — probe Siri daemon control"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -87,8 +87,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Read Siri Feature Inputs") {
-                            readSiriFeatureInputs()
+                        Button("Probe Siri Daemon Control") {
+                            probeSiriDaemonControl()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v41" }
+                            Button("Clear") { log = "AI Enabler v42" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -922,6 +922,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI FEATURE INPUT VALUES ===")
+    }
+
+    func probeSiriDaemonControl() {
+        appendLog("=== SIRI DAEMON CONTROL PROBE ===")
+        guard let cString = siri_daemon_control_probe() else {
+            appendLog("daemon probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI DAEMON CONTROL PROBE ===")
     }
 
     func probeSiriGroups() {
