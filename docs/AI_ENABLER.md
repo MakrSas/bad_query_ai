@@ -124,7 +124,8 @@ Workflow: .github/workflows/build.yml
 | v1-v3 | MobileGestalt spoof | Partial success with Nugget residual state |
 | v4 | Eligibility diagnostics | Found GREYMATTER blocking factor (GMS=2) |
 | v5 | Eligibility write attempts | All 5 methods failed, but verified eligibility auto-updates |
-| v6 | Feature flag attack + container scanner | Testing private API dlsym approach |
+| v6 | Feature flag attack + container scanner | No set API in FeatureFlags framework; Global.plist absent; container scan empty |
+| v7 | Eligibility API attack + MG key probe | Probing os_eligibility_set_input brute-force + domain scan 0-50 |
 
 ## Device
 
