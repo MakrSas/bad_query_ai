@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v33 — refresh Siri capability service"
+    @State private var log = "AI Enabler v34 — locate capability service binary"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Refresh Siri Capability Service") {
-                            refreshSiriCapabilityService()
+                        Button("Scan Siri Capability Service Binary") {
+                            scanSiriCapabilityServiceBinary()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v33" }
+                            Button("Clear") { log = "AI Enabler v34" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -838,6 +838,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI CAPABILITY SERVICE UPDATE ===")
+    }
+
+    func scanSiriCapabilityServiceBinary() {
+        appendLog("=== SIRI CAPABILITY SERVICE BINARY ===")
+        guard let cString = siri_capability_service_binary_probe() else {
+            appendLog("binary probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI CAPABILITY SERVICE BINARY ===")
     }
 
     func probeSiriGroups() {

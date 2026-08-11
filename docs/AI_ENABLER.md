@@ -440,6 +440,14 @@ Both client methods obtain a remote proxy through `serviceWithErrorHandler:` and
 
 v33 invokes the confirmed `updateCapabilities:` client method with a one-object completion block, waits at most eight seconds, reports the callback value or timeout, and then queries the three synchronous service booleans again. The intended sequence is Apply SAE Availability, Refresh SAE Cache, then this service update, without respring.
 
+### v33 device result
+
+The callback completed immediately with Cocoa error 4099 wrapping Mach lookup error 159: sandbox restriction while connecting to `com.apple.siri.orchestration.capabilities`. The three synchronous getters consequently returned false fallbacks rather than authoritative service values. Repeating the call produced the same result. Because iLoader performs ordinary Apple-ID sideload signing, a private mach-lookup entitlement is not a viable assumption; investigation returns to the service's persistent capability inputs.
+
+## v34 Capability Service Binary Discovery
+
+v34 checks likely system locations for the standalone capability XPC service or owning daemon. For any readable executable found, it extracts printable strings containing Siri, SAE, Linwood, Grey/Gray Matter, feature-flag, capability, orchestration, device-capable, or availability terms. This is a read-only scan intended to recover the service implementation's preference keys and upstream inputs without requiring Mach lookup access.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

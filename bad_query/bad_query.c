@@ -1639,6 +1639,58 @@ char *siri_capabilities_service_update(void) {
     return out;
 }
 
+static bool siri_service_interesting_string(const char *s) {
+    return strstr(s, "Siri") || strstr(s, "siri") || strstr(s, "SAE") ||
+           strstr(s, "sae") || strstr(s, "Linwood") || strstr(s, "linwood") ||
+           strstr(s, "Grey") || strstr(s, "Gray") || strstr(s, "FeatureFlag") ||
+           strstr(s, "Capabilities") || strstr(s, "capabilities") ||
+           strstr(s, "Orchestration") || strstr(s, "orchestration") ||
+           strstr(s, "DeviceCapable") || strstr(s, "Availability");
+}
+
+char *siri_capability_service_binary_probe(void) {
+    const size_t cap = 65536;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    const char *paths[] = {
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/XPCServices/com.apple.siri.orchestration.capabilities.xpc/com.apple.siri.orchestration.capabilities",
+        "/System/Library/PrivateFrameworks/SiriOrchestration.framework/XPCServices/com.apple.siri.orchestration.capabilities.xpc/com.apple.siri.orchestration.capabilities",
+        "/System/Library/PrivateFrameworks/SiriOrchestration.framework/PlugIns/com.apple.siri.orchestration.capabilities.xpc/com.apple.siri.orchestration.capabilities",
+        "/System/Library/XPCServices/com.apple.siri.orchestration.capabilities.xpc/com.apple.siri.orchestration.capabilities",
+        "/usr/libexec/com.apple.siri.orchestration.capabilities",
+        "/usr/libexec/siriorchestrationd",
+        "/usr/libexec/assistantd",
+        NULL
+    };
+    for (int p = 0; paths[p] && len + 1024 < cap; p++) {
+        struct stat st = {0};
+        if (stat(paths[p], &st) != 0) {
+            len += snprintf(out + len, cap - len, "MISS %s\n", paths[p]);
+            continue;
+        }
+        len += snprintf(out + len, cap - len, "FOUND size=%lld %s\n", (long long)st.st_size, paths[p]);
+        FILE *f = fopen(paths[p], "rb");
+        if (!f) { len += snprintf(out + len, cap - len, "OPEN_DENIED errno=%d\n", errno); continue; }
+        char string[2048] = {0}; size_t slen = 0; int ch;
+        while ((ch = fgetc(f)) != EOF && len + 4096 < cap) {
+            if (ch >= 0x20 && ch <= 0x7e) {
+                if (slen + 1 < sizeof(string)) string[slen++] = (char)ch;
+            } else {
+                if (slen >= 5) {
+                    string[slen] = 0;
+                    if (siri_service_interesting_string(string))
+                        len += snprintf(out + len, cap - len, "  %s\n", string);
+                }
+                slen = 0;
+            }
+        }
+        fclose(f);
+    }
+    len += snprintf(out + len, cap - len, "read-only binary string scan\n");
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.
