@@ -1745,6 +1745,64 @@ char *siri_capability_service_registration_probe(void) {
     return out;
 }
 
+static CFPropertyListRef copy_plist_at_path(const char *path) {
+    FILE *f = fopen(path, "rb"); if (!f) return NULL;
+    fseek(f, 0, SEEK_END); long size = ftell(f); rewind(f);
+    if (size <= 0 || size > 16 * 1024 * 1024) { fclose(f); return NULL; }
+    UInt8 *bytes = malloc((size_t)size); if (!bytes) { fclose(f); return NULL; }
+    size_t read = fread(bytes, 1, (size_t)size, f); fclose(f);
+    CFDataRef data = CFDataCreate(NULL, bytes, (CFIndex)read); free(bytes);
+    if (!data) return NULL;
+    CFErrorRef error = NULL;
+    CFPropertyListRef plist = CFPropertyListCreateWithData(NULL, data, kCFPropertyListImmutable, NULL, &error);
+    if (error) CFRelease(error); CFRelease(data); return plist;
+}
+
+static void scan_interesting_binary(const char *path, char *out, size_t cap, size_t *len) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { *len += snprintf(out + *len, cap - *len, "binary.open=FAILED errno=%d path=%s\n", errno, path); return; }
+    *len += snprintf(out + *len, cap - *len, "binary=%s\n", path);
+    char string[2048] = {0}; size_t slen = 0; int ch;
+    while ((ch = fgetc(f)) != EOF && *len + 4096 < cap) {
+        if (ch >= 0x20 && ch <= 0x7e) { if (slen + 1 < sizeof(string)) string[slen++] = (char)ch; }
+        else { if (slen >= 5) { string[slen] = 0; if (siri_service_interesting_string(string)) *len += snprintf(out + *len, cap - *len, "  %s\n", string); } slen = 0; }
+    }
+    fclose(f);
+}
+
+char *siri_capability_daemon_details(void) {
+    const size_t cap = 262144;
+    char *out = calloc(1, cap); if (!out) return NULL;
+    size_t len = 0;
+    const char *plists[] = {
+        "/System/Library/LaunchDaemons/com.apple.siriknowledged.plist",
+        "/System/Library/LaunchDaemons/com.apple.generativeexperiencesd.plist",
+        "/System/Library/LaunchDaemons/com.apple.assistantd.plist", NULL
+    };
+    for (int i = 0; plists[i] && len + 8192 < cap; i++) {
+        len += snprintf(out + len, cap - len, "[PLIST %s]\n", plists[i]);
+        CFPropertyListRef plist = copy_plist_at_path(plists[i]);
+        if (!plist) { len += snprintf(out + len, cap - len, "parse=FAILED\n"); continue; }
+        append_cf_description(out, cap, &len, "contents", plist);
+        if (CFGetTypeID(plist) == CFDictionaryGetTypeID()) {
+            CFDictionaryRef dict = (CFDictionaryRef)plist;
+            CFStringRef program = CFDictionaryGetValue(dict, CFSTR("Program"));
+            CFArrayRef args = CFDictionaryGetValue(dict, CFSTR("ProgramArguments"));
+            CFStringRef executable = program;
+            if (!executable && args && CFGetTypeID(args) == CFArrayGetTypeID() && CFArrayGetCount(args) > 0)
+                executable = CFArrayGetValueAtIndex(args, 0);
+            if (executable && CFGetTypeID(executable) == CFStringGetTypeID()) {
+                char path[PATH_MAX] = {0};
+                if (CFStringGetCString(executable, path, sizeof(path), kCFStringEncodingUTF8))
+                    scan_interesting_binary(path, out, cap, &len);
+            }
+        }
+        CFRelease(plist);
+    }
+    len += snprintf(out + len, cap - len, "read-only daemon plist/binary scan\n");
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

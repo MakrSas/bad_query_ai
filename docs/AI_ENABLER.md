@@ -456,6 +456,14 @@ None of the guessed standalone XPC, framework plug-in, or `/usr/libexec` executa
 
 v35 scans readable system LaunchDaemon and LaunchAgent plists for the exact Mach service name, and recursively inventories Siri/Assistant/Orchestration-named entries under system frameworks and `/usr/libexec`. It is read-only and intended to recover the owning executable path before scanning that exact binary.
 
+### v35 device result
+
+The exact Mach service appears in three launch daemon registrations: `com.apple.siriknowledged.plist`, `com.apple.generativeexperiencesd.plist`, and `com.apple.assistantd.plist`. The framework inventory also confirms the real AssistantServices `assistantd` support executable and dedicated SiriAvailability and SiriOrchestrationServices frameworks. The previous misses were path guesses, not absence of the service implementation.
+
+## v36 Capability Daemon Details
+
+v36 parses and prints the three exact launchd dictionaries, extracts each daemon executable from `Program` or `ProgramArguments`, and scans those binaries for Siri/SAE/feature/capability/orchestration strings. This identifies launch conditions, the active owner, and likely upstream keys without invoking or messaging any daemon.
+
 ## Device
 
 - iPhone 15 (iPhone15,4)

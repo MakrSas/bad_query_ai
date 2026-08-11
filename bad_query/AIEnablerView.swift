@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v35 — locate capability service registration"
+    @State private var log = "AI Enabler v36 — inspect capability daemons"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -81,8 +81,8 @@ struct AIEnablerView: View {
                     }
 
                     Section("Research") {
-                        Button("Locate Siri Capability Service") {
-                            locateSiriCapabilityService()
+                        Button("Inspect Siri Capability Daemons") {
+                            inspectSiriCapabilityDaemons()
                         }
                     }
 
@@ -122,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v35" }
+                            Button("Clear") { log = "AI Enabler v36" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -862,6 +862,18 @@ struct AIEnablerView: View {
         free(cString)
         for line in result.split(separator: "\n") { appendLog(String(line)) }
         appendLog("=== END SIRI CAPABILITY SERVICE REGISTRATION ===")
+    }
+
+    func inspectSiriCapabilityDaemons() {
+        appendLog("=== SIRI CAPABILITY DAEMON DETAILS ===")
+        guard let cString = siri_capability_daemon_details() else {
+            appendLog("daemon probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") { appendLog(String(line)) }
+        appendLog("=== END SIRI CAPABILITY DAEMON DETAILS ===")
     }
 
     func probeSiriGroups() {
