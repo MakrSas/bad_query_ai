@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v14 — composite Siri gate split"
+    @State private var log = "AI Enabler v15 — SAE locale diagnosis"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -44,14 +44,7 @@ struct AIEnablerView: View {
             ZStack {
                 Form {
                     Section("Step 1: MobileGestalt") {
-                        Button("Apply MG Spoof") {
-                            isWorking = true
-                            applyMG()
-                            isWorking = false
-                        }
-                        .disabled(isWorking)
-
-                        Button("Apply Full Identity Spoof (v9)") {
+                        Button("Apply Full AI Identity Spoof") {
                             isWorking = true
                             applyMG(fullIdentity: true)
                             isWorking = false
@@ -65,45 +58,13 @@ struct AIEnablerView: View {
                         }
                     }
 
-                    Section("Step 3: Feature Flags") {
-                        Button("Probe Private APIs") {
-                            probeAPIs()
-                        }
-
-                        Button("Check Required Flags") {
-                            checkRequiredFlags()
-                        }
-
-                        Button("Probe Siri Gate Symbols (Safe)") {
-                            probeSiriGate()
-                        }
-
-                        Button("Call System Assistant Gate") {
-                            callConfirmedSiriGate(0, name: "SystemAssistantExperience")
-                        }
-
-                        Button("Call SAE Capability+Flags Gate") {
-                            callConfirmedSiriGate(1, name: "SAEByDeviceCapabilityAndFeatureFlags")
-                        }
-
-                        Button("Call Combined SAE Gate") {
-                            callConfirmedSiriGate(2, name: "DeviceSupportsSAE")
-                        }
-
-                        Button("Call Siri UOD Gate") {
-                            callConfirmedSiriGate(3, name: "DeviceSupportsSiriUOD")
-                        }
-
-                        Button("Call GMS Hardware Gate") {
-                            callConfirmedSiriGate(4, name: "HasGMSCapabilityUnembargoed")
-                        }
-
-                        Button("Call UOD Assets Full Gate") {
-                            callConfirmedSiriGate(5, name: "UODStatusSupportedFull")
+                    Section("Step 3: Current Siri Gate") {
+                        Button("Probe Current Siri Gates") {
+                            probeCurrentSiriGates()
                         }
                     }
 
-                    Section("Step 4: MobileGestalt Research") {
+                    Section("Research") {
                         Button("Dump All CacheExtra Keys") {
                             isWorking = true
                             dumpCacheExtra()
@@ -116,17 +77,13 @@ struct AIEnablerView: View {
                         }
                     }
 
-                    Section("Step 5: Siri Containers") {
-                        Button("Probe Siri App Groups") {
-                            probeSiriGroups()
-                        }
-
+                    Section("Assets") {
                         Button("Probe AI/Siri Assets (Safe)") {
                             probeAIAssets()
                         }
                     }
 
-                    Section("Step 6: Apply") {
+                    Section("Apply") {
                         Button("Respring") {
                             showRespring = true
                         }
@@ -156,7 +113,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v14" }
+                            Button("Clear") { log = "AI Enabler v15" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -593,6 +550,32 @@ struct AIEnablerView: View {
         UserDefaults.standard.synchronize()
         appendLog("\(name)=\(result == 1 ? "TRUE" : result == 0 ? "false" : "err(\(result))")")
         appendLog("=== END ISOLATED SIRI GATE ===")
+    }
+
+    func probeCurrentSiriGates() {
+        appendLog("=== CURRENT SIRI GATES ===")
+        appendLog("locale.current=\(Locale.current.identifier)")
+        appendLog("locale.preferred=\(Locale.preferredLanguages.joined(separator: ","))")
+        if let region = Locale.current.region?.identifier {
+            appendLog("locale.region=\(region)")
+        }
+        let gates: [(Int32, String)] = [
+            (0, "SystemAssistantExperience"),
+            (1, "SAEByDeviceCapabilityAndFeatureFlags"),
+            (2, "DeviceSupportsSAE"),
+            (3, "DeviceSupportsSiriUOD"),
+            (4, "HasGMSCapabilityUnembargoed"),
+            (5, "LocaleSupportsSAE"),
+        ]
+        for (index, name) in gates {
+            UserDefaults.standard.set(name, forKey: "LastSiriGateAttempt")
+            UserDefaults.standard.synchronize()
+            let result = siri_gate_call_confirmed(index)
+            UserDefaults.standard.set("\(name)=\(result)", forKey: "LastSiriGateAttempt")
+            UserDefaults.standard.synchronize()
+            appendLog("\(name)=\(result == 1 ? "TRUE" : result == 0 ? "false" : "err(\(result))")")
+        }
+        appendLog("=== END CURRENT SIRI GATES ===")
     }
 
     func probeSiriGroups() {

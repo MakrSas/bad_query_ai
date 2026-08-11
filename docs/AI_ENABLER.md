@@ -133,6 +133,7 @@ Workflow: .github/workflows/build.yml
 | v12 | Siri asset diagnostics | Read-only MobileAsset inventory after partial Apple Intelligence activation |
 | v13 | Isolated Siri predicates | Separately invokes two no-argument gates whose calling convention is supported by recovered callsites |
 | v14 | Composite Siri gate split | Isolates combined SAE, Siri-UOD, GMS hardware, and full UOD asset status predicates |
+| v15 | SAE locale diagnosis + UI cleanup | Removes obsolete/unsafe buttons and adds one consolidated current-gate report |
 
 ## v7 Results
 
@@ -257,7 +258,15 @@ Recovered iOS 26.1 callsites invoke `AFDeviceSupportsSystemAssistantExperience()
 
 ## v14 Composite Gate Split
 
-v14 adds isolated calls for four more exports with recovered no-argument callsites: `AFDeviceSupportsSAE`, `AFDeviceSupportsSiriUOD`, `AFHasGMSCapabilityUnembargoed`, and `AFUODStatusSupportedFull`. This separates the combined SAE decision, Siri understanding-on-device support, unembargoed GMS hardware capability, and fully prepared UOD assets. `AFLocaleSupportsSAE` remains presence-only because its exact parameter contract has not been recovered; it is a likely source of the old v10 batch crash.
+v14 added isolated calls for `AFDeviceSupportsSAE`, `AFDeviceSupportsSiriUOD`, `AFHasGMSCapabilityUnembargoed`, and an experimental `AFUODStatusSupportedFull` probe. This separated the combined SAE decision, Siri understanding-on-device support, and unembargoed GMS hardware capability. The UOD-status experiment later proved unsafe on the target build and was removed in v15.
+
+### v14 device result
+
+`AFDeviceSupportsSAE()` returned `false`, while `AFDeviceSupportsSiriUOD()` and `AFHasGMSCapabilityUnembargoed()` returned `true`. Together with v13's capability-plus-flags `true`, the failure is inside an additional combined-SAE condition rather than hardware, GMS embargo, FeatureFlags, or Siri UOD support. Calling `AFUODStatusSupportedFull` terminated the app, so that action is removed and the function is no longer treated as a confirmed Boolean ABI.
+
+## v15 Locale Gate and UI Cleanup
+
+VoiceTriggerUI diagnostics explicitly reference `AFLocaleSupportsSAE()` with no arguments, confirming its calling convention. v15 replaces the unsafe UOD-assets slot with this locale predicate and reports `Locale.current`, preferred languages, and region alongside all previously safe gate results. The UI now keeps only the full identity spoof, eligibility/full status, consolidated current Siri gates, research dumps, safe asset probe, respring, and revert; obsolete partial spoof and completed one-off gate buttons are removed.
 
 ## Device
 

@@ -541,7 +541,7 @@ int siri_gate_call_confirmed(int gate_index) {
         "AFDeviceSupportsSAE",
         "AFDeviceSupportsSiriUOD",
         "AFHasGMSCapabilityUnembargoed",
-        "AFUODStatusSupportedFull",
+        "AFLocaleSupportsSAE",
     };
     if (gate_index < 0 || gate_index >= 6) return -1;
 
