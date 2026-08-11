@@ -143,6 +143,7 @@ Workflow: .github/workflows/build.yml
 | v22 | SAE refresh call map | Resolves every direct call and Objective-C selector used by the iOS 27 refresh IMP |
 | v23 | Siri availability inspection | Reads the live capability structure and names its missing SAE bits |
 | v24 | Siri availability runtime map | Enumerates the new availability object's methods, properties, and ivars |
+| v25 | Availability source details | Compares live and preference-backed objects, reasons, modes, and missing capabilities |
 
 ## v7 Results
 
@@ -348,6 +349,14 @@ The live system-assistant word is `0x34`; required mask `0x27` is missing `0x3`.
 ## v24 Availability Runtime Metadata
 
 v24 enumerates all methods, class methods, properties, and ivars of the exact-build `AFSiriAvailability` object, including Objective-C type encodings and ivar offsets. This determines whether the two missing bits have direct getters/setters or whether their source must be recovered from the manager's `fetchSiriAvailability` implementation. The action is read-only.
+
+### v24 device result
+
+`AFSiriAvailability` is an immutable 120-byte value object. Its `AFSiriAllCapabilities` ivar begins at offset 80 and names the five words as full-UOD, hybrid, SAE, Linwood, and visual-intelligence capabilities. It exposes no setters, but it does expose detailed reason/mode getters, `toDictionary`, `dumpDescription`, `missingDesiredCapabilitiesFor:`, and a class factory `fromPreferences`.
+
+## v25 Live vs Preferences
+
+v25 compares the manager's live `fetchSiriAvailability` object with `+[AFSiriAvailability fromPreferences]`. It reports status, restriction and unavailability masks, all orchestration modes, boot freshness, Linwood predicates, all five capability words, serialized dictionaries, dump descriptions, and missing-capability objects for modes 2 through 5. This is read-only and determines whether a persistent preference representation can carry the required `0x3` bits.
 
 ## Device
 

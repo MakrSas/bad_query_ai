@@ -1135,6 +1135,96 @@ char *siri_availability_runtime_map(void) {
     return out;
 }
 
+static void append_availability_details(char *out, size_t cap, size_t *len,
+                                        const char *prefix, id availability) {
+    if (!availability) {
+        *len += snprintf(out + *len, cap - *len, "%s=<nil>\n", prefix);
+        return;
+    }
+    int64_t status = ((int64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("status"));
+    uint64_t restrictions = ((uint64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("restrictionReasons"));
+    uint64_t unavailable = ((uint64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("unavailabilityReasons"));
+    uint64_t desired = ((uint64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("desiredOrchestrationMode"));
+    uint64_t desired_enabled = ((uint64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("desiredOrchestrationModeIfEnabled"));
+    uint64_t current = ((uint64_t (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("currentOrchestrationMode"));
+    bool available = ((bool (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("isAvailable"));
+    bool current_boot = ((bool (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("fromCurrentBoot"));
+    bool capable_ignoring_setting = ((bool (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("isLinwoodCapableIgnoringUserSetting"));
+    bool capable_ever = ((bool (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("isLinwoodCapableAndEverAvailable"));
+    siri_capabilities_t capabilities =
+        ((siri_capabilities_t (*)(id, SEL))objc_msgSend)(
+            availability, sel_registerName("allCapabilities"));
+    *len += snprintf(out + *len, cap - *len,
+                     "[%s] status=%lld available=%d restrictions=0x%llx unavailable=0x%llx\n"
+                     "[%s] desired=%llu desiredIfEnabled=%llu current=%llu currentBoot=%d\n"
+                     "[%s] linwoodIgnoringSetting=%d linwoodEver=%d caps=%llx,%llx,%llx,%llx,%llx\n",
+                     prefix, (long long)status, available ? 1 : 0,
+                     (unsigned long long)restrictions, (unsigned long long)unavailable,
+                     prefix, (unsigned long long)desired,
+                     (unsigned long long)desired_enabled, (unsigned long long)current,
+                     current_boot ? 1 : 0, prefix,
+                     capable_ignoring_setting ? 1 : 0, capable_ever ? 1 : 0,
+                     (unsigned long long)capabilities.words[0],
+                     (unsigned long long)capabilities.words[1],
+                     (unsigned long long)capabilities.words[2],
+                     (unsigned long long)capabilities.words[3],
+                     (unsigned long long)capabilities.words[4]);
+
+    id dictionary = ((id (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("toDictionary"));
+    id dump = ((id (*)(id, SEL))objc_msgSend)(
+        availability, sel_registerName("dumpDescription"));
+    char label[128];
+    snprintf(label, sizeof(label), "%s.dictionary", prefix);
+    append_cf_description(out, cap, len, label, (CFTypeRef)dictionary);
+    snprintf(label, sizeof(label), "%s.dump", prefix);
+    append_cf_description(out, cap, len, label, (CFTypeRef)dump);
+
+    for (uint64_t mode = 2; mode <= 5; mode++) {
+        id missing = ((id (*)(id, SEL, uint64_t))objc_msgSend)(
+            availability, sel_registerName("missingDesiredCapabilitiesFor:"), mode);
+        snprintf(label, sizeof(label), "%s.missingForMode%llu", prefix,
+                 (unsigned long long)mode);
+        append_cf_description(out, cap, len, label, (CFTypeRef)missing);
+    }
+}
+
+char *siri_availability_detail_probe(void) {
+    const size_t cap = 32768;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    void *assistant = dlopen(
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        RTLD_NOW | RTLD_LOCAL);
+    if (!assistant) {
+        snprintf(out, cap, "AssistantServices=NOT_LOADED\n");
+        return out;
+    }
+    Class manager_class = objc_getClass("AFSystemAssistantExperienceStatusManager");
+    id manager = manager_class ? ((id (*)(id, SEL))objc_msgSend)(
+        (id)manager_class, sel_registerName("sharedManager")) : nil;
+    id live = manager ? ((id (*)(id, SEL))objc_msgSend)(
+        manager, sel_registerName("fetchSiriAvailability")) : nil;
+    Class availability_class = objc_getClass("AFSiriAvailability");
+    id preferences = availability_class ? ((id (*)(id, SEL))objc_msgSend)(
+        (id)availability_class, sel_registerName("fromPreferences")) : nil;
+    append_availability_details(out, cap, &len, "live", live);
+    append_availability_details(out, cap, &len, "preferences", preferences);
+    dlclose(assistant);
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

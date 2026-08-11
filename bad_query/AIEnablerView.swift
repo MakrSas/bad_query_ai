@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v24 — map Siri availability runtime"
+    @State private var log = "AI Enabler v25 — availability source details"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -71,8 +71,8 @@ struct AIEnablerView: View {
                             inspectSiriAvailability()
                         }
 
-                        Button("Map Availability Runtime (Safe)") {
-                            mapSiriAvailabilityRuntime()
+                        Button("Inspect Availability Sources") {
+                            inspectSiriAvailabilitySources()
                         }
                     }
 
@@ -125,7 +125,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v24" }
+                            Button("Clear") { log = "AI Enabler v25" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -723,6 +723,21 @@ struct AIEnablerView: View {
         }
         appendLog("read-only runtime metadata")
         appendLog("=== END SIRI AVAILABILITY RUNTIME ===")
+    }
+
+    func inspectSiriAvailabilitySources() {
+        appendLog("=== AVAILABILITY SOURCES ===")
+        guard let cString = siri_availability_detail_probe() else {
+            appendLog("probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("read-only; live and preference objects unchanged")
+        appendLog("=== END AVAILABILITY SOURCES ===")
     }
 
     func probeSiriGroups() {
