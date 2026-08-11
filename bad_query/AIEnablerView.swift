@@ -4,36 +4,50 @@ import WebKit
 private let mgPath = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist"
 private let mgDir = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/"
 
-// eligibility paths to try (in order)
-private let eligPaths: [(path: String, create: Bool, label: String)] = [
-    ("/var/db/eligibilityd/eligibility.plist", true, "eligibilityd-db"),
-    ("/var/containers/Data/System/com.apple.eligibilityd/Library/Caches/NeverRestore/eligibility_overrides.data", true, "eligibilityd-container"),
-    ("/var/db/os_eligibility/eligibility.plist", true, "os_eligibility-db"),
+struct DeviceProfile: Identifiable {
+    let id: String
+    let name: String
+    let model: String
+    let hardware: String
+    let cpu: String
+}
+
+private let deviceProfiles: [DeviceProfile] = [
+    DeviceProfile(id: "15pro", name: "iPhone 15 Pro", model: "iPhone16,1", hardware: "D83AP", cpu: "t8130"),
+    DeviceProfile(id: "15promax", name: "iPhone 15 Pro Max", model: "iPhone16,2", hardware: "D84AP", cpu: "t8130"),
+    DeviceProfile(id: "16", name: "iPhone 16", model: "iPhone17,3", hardware: "D47AP", cpu: "t8140"),
+    DeviceProfile(id: "16pro", name: "iPhone 16 Pro", model: "iPhone17,1", hardware: "D93AP", cpu: "t8140"),
+    DeviceProfile(id: "16promax", name: "iPhone 16 Pro Max", model: "iPhone17,2", hardware: "D94AP", cpu: "t8140"),
 ]
 
-// feature flag paths to try
-private let ffPaths: [(path: String, create: Bool, label: String)] = [
-    ("/var/preferences/FeatureFlags/Global.plist", true, "featureflags-preferences"),
-]
-
-// container classes to try for eligibility
-private let eligContainers: [(identifier: String, cls: UInt64, label: String)] = [
-    ("com.apple.eligibilityd", 10, "SystemData-10"),
-    ("com.apple.eligibilityd", 12, "InternalDaemon-12"),
-    ("com.apple.eligibilityd", 15, "SystemShared-15"),
-    ("systemgroup.com.apple.eligibilityd", 13, "SharedSystemData-13"),
-]
+// MobileGestalt keys
+private let kAICapability = "A62OafQ85EJAiiqKn4agtg"
+private let kProductType = "h9jDsbgj7xIVeIQ8S3/X3Q"
+private let kHardwareModel = "oYicEKzVTz4/CxxE05pEgQ"
+private let kCPUChip = "5pYKlGnYYBzGvAlIU8RjEQ"
 
 struct AIEnablerView: View {
-    @State private var log = "Apple Intelligence Enabler\nAll-in-one: MobileGestalt + Eligibility + FeatureFlags"
+    @State private var log = "Apple Intelligence Enabler\nSpoofs device model + sets AI key"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
+    @State private var selectedProfile = "15pro"
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Form {
+                    Section("Device Spoof") {
+                        Picker("Spoof as", selection: $selectedProfile) {
+                            ForEach(deviceProfiles) { profile in
+                                Text(profile.name).tag(profile.id)
+                            }
+                        }
+                        Text("Spoofs model/hardware/CPU so eligibilityd thinks your device natively supports Apple Intelligence.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Section("Apple Intelligence") {
                         Button("Enable Apple Intelligence") {
                             isWorking = true
@@ -122,54 +136,32 @@ struct AIEnablerView: View {
         return handle
     }
 
-    func acquireSandboxEx(_ path: String, identifier: String, containerClass: UInt64, label: String) -> Int64 {
-        var pathC = path.utf8CString.map { Int8($0) }
-        var idC = identifier.utf8CString.map { Int8($0) }
-        let handle = bad_query_ex(&pathC, true, &idC, containerClass)
-        if handle >= 0 {
-            appendLog("[\(label)] sandbox OK via class \(containerClass) (handle: \(handle))")
-        } else {
-            appendLog("[\(label)] class \(containerClass) FAILED: \(bqErrorString(handle))")
-        }
-        return handle
-    }
-
-    func writeToPath(_ path: String, data: Data, label: String) -> Bool {
-        let url = URL(fileURLWithPath: path)
-        let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        do {
-            try data.write(to: url)
-            appendLog("[\(label)] wrote \(data.count) bytes to \(path)")
-            return true
-        } catch {
-            appendLog("[\(label)] write FAILED: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    // MARK: - Enable AI (all 3 steps)
+    // MARK: - Enable AI
 
     func enableAI() {
         appendLog("--- enabling Apple Intelligence ---")
 
-        let mgOK = applyMobileGestalt()
-        let eligOK = applyEligibility()
-        let ffOK = applyFeatureFlags()
+        guard let profile = deviceProfiles.first(where: { $0.id == selectedProfile }) else {
+            appendLog("ERROR: no profile selected")
+            return
+        }
+        appendLog("Spoofing as: \(profile.name) (\(profile.model))")
+
+        let ok = applyMobileGestalt(profile: profile)
 
         appendLog("--- done ---")
-        if mgOK && eligOK && ffOK {
-            appendLog("All 3 components written successfully!")
+        if ok {
+            appendLog("MobileGestalt modified successfully!")
             appendLog("Tap Respring to apply changes.")
+            appendLog("After respring, wait for AI assets to download.")
         } else {
-            appendLog("Some steps failed — check log above.")
+            appendLog("Failed — check log above.")
         }
     }
 
-    // MARK: - Step 1: MobileGestalt
+    // MARK: - MobileGestalt
 
-    func applyMobileGestalt() -> Bool {
+    func applyMobileGestalt(profile: DeviceProfile) -> Bool {
         appendLog("[gestalt] modifying MobileGestalt...")
         let handle = acquireSandbox(mgDir, label: "gestalt")
         guard handle >= 0 else { return false }
@@ -198,13 +190,24 @@ struct AIEnablerView: View {
 
         let cacheExtra = dict["CacheExtra"] as? NSMutableDictionary ?? NSMutableDictionary()
 
-        // Apple Intelligence key
-        cacheExtra["A62OafQ85EJAiiqKn4agtg"] = 1
+        // AI capability key
+        cacheExtra[kAICapability] = 1
+        appendLog("[gestalt] set AI key = 1")
+
+        // Device model spoof
+        cacheExtra[kProductType] = profile.model
+        appendLog("[gestalt] set ProductType = \(profile.model)")
+
+        cacheExtra[kHardwareModel] = profile.hardware
+        appendLog("[gestalt] set HardwareModel = \(profile.hardware)")
+
+        cacheExtra[kCPUChip] = profile.cpu
+        appendLog("[gestalt] set CPUChip = \(profile.cpu)")
+
         dict["CacheExtra"] = cacheExtra
 
         do {
             let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
-            // atomic write via temp file (same as mond)
             let tempURL = mgURL.deletingLastPathComponent()
                 .appendingPathComponent(".\(mgURL.lastPathComponent).\(UUID().uuidString).tmp")
             try data.write(to: tempURL, options: [.withoutOverwriting])
@@ -215,7 +218,7 @@ struct AIEnablerView: View {
             } else {
                 try FileManager.default.moveItem(at: tempURL, to: mgURL)
             }
-            appendLog("[gestalt] AI key set (A62OafQ85EJAiiqKn4agtg = 1)")
+            appendLog("[gestalt] plist written OK")
             return true
         } catch {
             appendLog("[gestalt] write FAILED: \(error.localizedDescription)")
@@ -223,173 +226,27 @@ struct AIEnablerView: View {
         }
     }
 
-    // MARK: - Step 2: Eligibility
-
-    func applyEligibility() -> Bool {
-        let plist: [String: Any] = [
-            "OS_ELIGIBILITY_DOMAIN_GREYMATTER": [
-                "context": [
-                    "OS_ELIGIBILITY_CONTEXT_ELIGIBLE_DEVICE_LANGUAGES": [["en"]]
-                ],
-                "os_eligibility_answer_source_t": 1,
-                "os_eligibility_answer_t": 4,
-                "status": [
-                    "OS_ELIGIBILITY_INPUT_DEVICE_LANGUAGE": 3,
-                    "OS_ELIGIBILITY_INPUT_DEVICE_REGION_CODE": 3,
-                    "OS_ELIGIBILITY_INPUT_EXTERNAL_BOOT_DRIVE": 3,
-                    "OS_ELIGIBILITY_INPUT_GENERATIVE_MODEL_SYSTEM": 3,
-                    "OS_ELIGIBILITY_INPUT_SHARED_IPAD": 3,
-                    "OS_ELIGIBILITY_INPUT_SIRI_LANGUAGE": 3
-                ]
-            ] as [String: Any],
-            "OS_ELIGIBILITY_DOMAIN_CALCIUM": [
-                "os_eligibility_answer_source_t": 1,
-                "os_eligibility_answer_t": 2,
-                "status": [
-                    "OS_ELIGIBILITY_INPUT_CHINA_CELLULAR": 2
-                ]
-            ] as [String: Any]
-        ]
-
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
-            appendLog("[eligibility] failed to serialize")
-            return false
-        }
-
-        appendLog("[eligibility] trying path traversal strategies...")
-
-        // Strategy 1: try standard bad_query with create=true for each path
-        for entry in eligPaths {
-            let handle = acquireSandbox(entry.path, label: entry.label, create: entry.create)
-            if handle >= 0 {
-                let ok = writeToPath(entry.path, data: data, label: entry.label)
-                bad_query_release(handle)
-                if ok { return true }
-            }
-        }
-
-        // Strategy 2: try different container classes via bad_query_ex
-        appendLog("[eligibility] trying container class strategies...")
-        for container in eligContainers {
-            for entry in eligPaths {
-                let handle = acquireSandboxEx(entry.path, identifier: container.identifier, containerClass: container.cls, label: "\(entry.label)/\(container.label)")
-                if handle >= 0 {
-                    let ok = writeToPath(entry.path, data: data, label: "\(entry.label)/\(container.label)")
-                    bad_query_release(handle)
-                    if ok { return true }
-                }
-            }
-        }
-
-        appendLog("[eligibility] all strategies failed")
-        return false
-    }
-
-    // MARK: - Step 3: Feature Flags
-
-    func applyFeatureFlags() -> Bool {
-        let newFlags: [String: Any] = [
-            "Siri": [
-                "sae_override": ["Enabled": true],
-                "assistant_engine_override": ["Enabled": true]
-            ],
-            "SiriUI": [
-                "sae": ["Enabled": true]
-            ]
-        ]
-
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: newFlags, format: .xml, options: 0) else {
-            appendLog("[featureflags] failed to serialize")
-            return false
-        }
-
-        appendLog("[featureflags] trying strategies...")
-
-        // Strategy 1: standard bad_query with create=true
-        for entry in ffPaths {
-            let handle = acquireSandbox(entry.path, label: entry.label, create: entry.create)
-            if handle >= 0 {
-                // try to merge with existing
-                var writeData = data
-                if let existingData = try? Data(contentsOf: URL(fileURLWithPath: entry.path)),
-                   let existing = try? PropertyListSerialization.propertyList(from: existingData, format: nil) as? [String: Any] {
-                    appendLog("[\(entry.label)] merging with existing")
-                    let merged = mergeDict(base: existing, overlay: newFlags)
-                    writeData = (try? PropertyListSerialization.data(fromPropertyList: merged, format: .xml, options: 0)) ?? data
-                }
-                let ok = writeToPath(entry.path, data: writeData, label: entry.label)
-                bad_query_release(handle)
-                if ok { return true }
-            }
-        }
-
-        // Strategy 2: try via container classes
-        for entry in ffPaths {
-            for cls: UInt64 in [10, 12, 13, 15] {
-                let handle = acquireSandboxEx(entry.path, identifier: "com.apple.preferences", containerClass: cls, label: "ff-class\(cls)")
-                if handle >= 0 {
-                    let ok = writeToPath(entry.path, data: data, label: "ff-class\(cls)")
-                    bad_query_release(handle)
-                    if ok { return true }
-                }
-            }
-        }
-
-        appendLog("[featureflags] all strategies failed")
-        return false
-    }
-
     // MARK: - Check Status
 
     func checkStatus() {
         appendLog("--- status ---")
 
-        // MobileGestalt
         let mgHandle = acquireSandbox(mgDir, label: "gestalt")
         if mgHandle >= 0 {
             if let dict = NSDictionary(contentsOf: URL(fileURLWithPath: mgPath)),
                let ce = dict["CacheExtra"] as? NSDictionary {
-                let aiKey = ce["A62OafQ85EJAiiqKn4agtg"]
+                let aiKey = ce[kAICapability]
+                let model = ce[kProductType] as? String ?? "not set"
+                let hw = ce[kHardwareModel] as? String ?? "not set"
+                let cpu = ce[kCPUChip] as? String ?? "not set"
                 appendLog("[gestalt] AI key = \(aiKey ?? "not set")")
+                appendLog("[gestalt] ProductType = \(model)")
+                appendLog("[gestalt] HardwareModel = \(hw)")
+                appendLog("[gestalt] CPUChip = \(cpu)")
             } else {
                 appendLog("[gestalt] cannot read plist")
             }
             bad_query_release(mgHandle)
-        }
-
-        // Eligibility — try all known paths
-        var eligFound = false
-        for entry in eligPaths {
-            let handle = acquireSandbox(entry.path, label: entry.label, create: true)
-            if handle >= 0 {
-                if let data = try? Data(contentsOf: URL(fileURLWithPath: entry.path)),
-                   let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-                   let gm = plist["OS_ELIGIBILITY_DOMAIN_GREYMATTER"] as? [String: Any],
-                   let answer = gm["os_eligibility_answer_t"] as? Int {
-                    appendLog("[eligibility] GREYMATTER = \(answer) \(answer == 4 ? "(eligible)" : "(NOT eligible)") at \(entry.path)")
-                    eligFound = true
-                }
-                bad_query_release(handle)
-                if eligFound { break }
-            }
-        }
-        if !eligFound {
-            appendLog("[eligibility] not accessible via any known path")
-        }
-
-        // Feature Flags
-        for entry in ffPaths {
-            let handle = acquireSandbox(entry.path, label: entry.label, create: true)
-            if handle >= 0 {
-                if let data = try? Data(contentsOf: URL(fileURLWithPath: entry.path)),
-                   let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
-                    let saeOverride = ((plist["Siri"] as? [String: Any])?["sae_override"] as? [String: Any])?["Enabled"] as? Bool
-                    appendLog("[featureflags] Siri.sae_override = \(saeOverride.map(String.init(describing:)) ?? "missing")")
-                } else {
-                    appendLog("[featureflags] not found or unreadable at \(entry.path)")
-                }
-                bad_query_release(handle)
-            }
         }
 
         appendLog("--- done ---")
