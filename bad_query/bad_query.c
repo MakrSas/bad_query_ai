@@ -14,6 +14,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <xpc/xpc.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <notify.h>
 
 #include <sys/mount.h>
 #include <sys/fsgetpath.h>
@@ -227,7 +229,7 @@ void *mg_copy_answer(const char *key) {
     MGCopyAnswerFn fn = (MGCopyAnswerFn)dlsym(mg, "MGCopyAnswer");
     if (!fn) { dlclose(mg); return NULL; }
     // Create CFString from C string
-    const void *cfKey = CFStringCreateWithCString(NULL, key, 0x08000100); // kCFStringEncodingUTF8
+    CFStringRef cfKey = CFStringCreateWithCString(kCFAllocatorDefault, key, kCFStringEncodingUTF8);
     if (!cfKey) { dlclose(mg); return NULL; }
     void *result = fn(cfKey);
     CFRelease(cfKey);
@@ -240,7 +242,7 @@ bool mg_get_bool_answer(const char *key) {
     if (!mg) return false;
     MGGetBoolAnswerFn fn = (MGGetBoolAnswerFn)dlsym(mg, "MGGetBoolAnswer");
     if (!fn) { dlclose(mg); return false; }
-    const void *cfKey = CFStringCreateWithCString(NULL, key, 0x08000100);
+    CFStringRef cfKey = CFStringCreateWithCString(kCFAllocatorDefault, key, kCFStringEncodingUTF8);
     if (!cfKey) { dlclose(mg); return false; }
     bool result = fn(cfKey);
     CFRelease(cfKey);
@@ -249,8 +251,6 @@ bool mg_get_bool_answer(const char *key) {
 }
 
 void mg_notify_cache_changed(void) {
-    // Post Darwin notification to tell MobileGestaltHelper to re-read its cache
-    extern uint32_t notify_post(const char *name);
     notify_post("com.apple.MobileGestalt.cache-changed");
 }
 
