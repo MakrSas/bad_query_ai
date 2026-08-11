@@ -376,6 +376,89 @@ int ff_check(const char *subsystem, const char *flag) {
     return result;
 }
 
+char *siri_gate_probe(void) {
+    const char *assistant_paths[] = {
+        "/System/Library/PrivateFrameworks/AssistantServices.framework/AssistantServices",
+        NULL
+    };
+    const char *assistant_symbols[] = {
+        "AFDeviceSupportsSystemAssistantExperience",
+        "AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags",
+        "AFLocaleSupportsSAE",
+        "AFDeviceSupportsSAE",
+        "AFHasGMSCapability",
+        "AFHasGMSCapabilityUnembargoed",
+        "AFDeviceSupportsSiriUOD",
+        "AFUODStatusSupportedFull",
+        NULL
+    };
+    const char *mg_symbols[] = {
+        "_MobileGestalt_get_deviceSupportsSiriUnderstandingOnDevice",
+        "MobileGestalt_get_deviceSupportsSiriUnderstandingOnDevice",
+        NULL
+    };
+    const char *ff_domains[][2] = {
+        { "Siri", "sae_override" },
+        { "Siri", "assistant_engine_override" },
+        { "Siri", "assistant_engine" },
+        { "Siri", "force_uod_enabled_for_device" },
+        { "SiriUI", "sae" },
+        { "SiriUI", "sae_use_container" },
+        { "SiriNL", "NLRouter" },
+        { "GenerativeModels", "GenerativeModelsAvailability" },
+        { "IntelligenceFlow", "IntelligenceFlow" },
+        { NULL, NULL }
+    };
+
+    size_t cap = 8192;
+    char *out = calloc(1, cap);
+    if (!out) return NULL;
+    size_t len = 0;
+    typedef bool (*bool_noargs_fn)(void);
+
+    void *assistant = NULL;
+    for (int i = 0; assistant_paths[i] && !assistant; i++)
+        assistant = dlopen(assistant_paths[i], RTLD_NOW | RTLD_LOCAL);
+
+    len += snprintf(out + len, cap - len, "[AssistantServices] loaded=%d\n", assistant != NULL);
+    if (assistant) {
+        for (int i = 0; assistant_symbols[i]; i++) {
+            bool_noargs_fn fn = (bool_noargs_fn)dlsym(assistant, assistant_symbols[i]);
+            if (fn) {
+                len += snprintf(out + len, cap - len, "%s=%d\n", assistant_symbols[i], fn() ? 1 : 0);
+            } else {
+                len += snprintf(out + len, cap - len, "%s=NO_SYMBOL\n", assistant_symbols[i]);
+            }
+        }
+        dlclose(assistant);
+    }
+
+    void *mg = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_NOW | RTLD_LOCAL);
+    len += snprintf(out + len, cap - len, "[MobileGestalt Siri UOD]\n");
+    if (mg) {
+        for (int i = 0; mg_symbols[i]; i++) {
+            bool_noargs_fn fn = (bool_noargs_fn)dlsym(mg, mg_symbols[i]);
+            if (fn) {
+                len += snprintf(out + len, cap - len, "%s=%d\n", mg_symbols[i], fn() ? 1 : 0);
+            } else {
+                len += snprintf(out + len, cap - len, "%s=NO_SYMBOL\n", mg_symbols[i]);
+            }
+        }
+        dlclose(mg);
+    } else {
+        len += snprintf(out + len, cap - len, "library=NOT_LOADED\n");
+    }
+
+    len += snprintf(out + len, cap - len, "[FeatureFlags]\n");
+    for (int i = 0; ff_domains[i][0]; i++) {
+        int value = ff_check(ff_domains[i][0], ff_domains[i][1]);
+        len += snprintf(out + len, cap - len, "%s.%s=%d\n",
+                        ff_domains[i][0], ff_domains[i][1], value);
+    }
+
+    return out;
+}
+
 char *elig_probe_domains(void) {
     // v7 proved the guessed ABI crashes on iOS 27. Keep this exported entry
     // point inert until a prototype is recovered from the matching binary.

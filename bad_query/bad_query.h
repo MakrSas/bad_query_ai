@@ -27,6 +27,7 @@ void post_darwin_notification(const char *name);
 char *probe_private_apis(void);
 int ff_try_set(const char *subsystem, const char *flag, bool value);
 int ff_check(const char *subsystem, const char *flag);
+char *siri_gate_probe(void);
 
 // Eligibility private API
 char *elig_probe_domains(void);

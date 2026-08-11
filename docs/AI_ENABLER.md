@@ -128,6 +128,7 @@ Workflow: .github/workflows/build.yml
 | v7 | Eligibility API attack + MG key probe | CRASH: wrong API signatures; MG key hashes wrong for iOS 27 |
 | v8 | FeatureFlags ABI + process-boundary strategy | Strategy documented; daemon injection is the primary feasibility gate |
 | v9 | Full iOS 27 MobileGestalt identity spoof | Pending device test; patches newly discovered ProductType/HWModel mirrors |
+| v10 | Complete Siri gate diagnostics | Probes AssistantServices, Siri UOD MobileGestalt getter, and expanded FeatureFlags |
 
 ## v7 Results
 
@@ -190,6 +191,21 @@ The v8 device dump contained 82 `CacheExtra` keys. It proved that the original f
 This creates a plausible iOS 27 hard-gate path: eligibility reads the classic spoofed keys and becomes eligible, while a Siri consumer can read a newer component-specific identity and still see the unsupported device.
 
 v9 adds a separate **Apply Full Identity Spoof** action. It preserves the existing backup, writes `iPhone16,1` to the confirmed ProductType mirrors and `D83AP` to the confirmed HWModel mirrors, then requires a respring. Camera/audio-specific mirrors are included, so temporary subsystem instability is possible; reboot remains the hardware-cache rollback path.
+
+## v10 Gate Probe
+
+The raw FeatureFlags result does not reveal which combined Siri predicate fails. v10 adds a read-only **Probe Complete Siri Gate** action that resolves and calls exported zero-argument AssistantServices predicates:
+
+- `AFDeviceSupportsSystemAssistantExperience`
+- `AFDeviceSupportsSAEByDeviceCapabilityAndFeatureFlags`
+- `AFLocaleSupportsSAE`
+- `AFDeviceSupportsSAE`
+- `AFHasGMSCapability` and `AFHasGMSCapabilityUnembargoed`
+- `AFDeviceSupportsSiriUOD` and `AFUODStatusSupportedFull`
+
+It also probes the MobileGestalt Siri-understanding getter and additional flags including `Siri.assistant_engine`, `Siri.force_uod_enabled_for_device`, `SiriUI.sae_use_container`, `SiriNL.NLRouter`, `GenerativeModels.GenerativeModelsAvailability`, and `IntelligenceFlow.IntelligenceFlow`.
+
+This separates four possible blockers after v9: device capability, locale, FeatureFlags, or downstream assistant/UOD availability.
 
 ## Device
 

@@ -34,7 +34,7 @@ private let hardwareModelMirrorKeys = [
 ]
 
 struct AIEnablerView: View {
-    @State private var log = "AI Enabler v9 — Full iOS 27 identity spoof"
+    @State private var log = "AI Enabler v10 — Siri gate diagnostics"
     @State private var isWorking = false
     @State private var showRespring = false
     @State private var showRevertConfirm = false
@@ -72,6 +72,10 @@ struct AIEnablerView: View {
 
                         Button("Check Required Flags") {
                             checkRequiredFlags()
+                        }
+
+                        Button("Probe Complete Siri Gate") {
+                            probeSiriGate()
                         }
                     }
 
@@ -118,7 +122,7 @@ struct AIEnablerView: View {
                         .frame(height: 320)
 
                         HStack {
-                            Button("Clear") { log = "AI Enabler v9" }
+                            Button("Clear") { log = "AI Enabler v10" }
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = log }
                         }
@@ -528,6 +532,20 @@ struct AIEnablerView: View {
         appendLog("ABI=bool(const char *, const char *)")
         appendLog("scope=current process only")
         appendLog("=== END FLAGS ===")
+    }
+
+    func probeSiriGate() {
+        appendLog("=== COMPLETE SIRI GATE ===")
+        guard let cString = siri_gate_probe() else {
+            appendLog("probe returned nil")
+            return
+        }
+        let result = String(cString: cString)
+        free(cString)
+        for line in result.split(separator: "\n") {
+            appendLog(String(line))
+        }
+        appendLog("=== END SIRI GATE ===")
     }
 
     func fullStatus() {
